@@ -1,0 +1,2436 @@
+<!doctype html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Фоторедактор Lumen</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="vendor/fonts/fonts.css">
+<link rel="stylesheet" href="js/pro.css">
+<script src="js/native-capacitor.js"></script>
+<style>
+/* Layout: Photoshop-style workspace (tool rail · canvas · inspector) dressed as iOS Photos edit mode; on phones it folds into the iPhone layout (canvas, controls, tab bar). Single deliberate dark theme, like iOS edit mode. */
+:root{
+  --bg:#000;
+  --chrome:#0e0e10;
+  --surface:#1c1c1e;
+  --surface2:#2c2c2e;
+  --line:#2f2f33;
+  --fg:#f5f5f7;
+  --fg2:#98989f;
+  --fg3:#5e5e64;
+  --accent:#ffd60a;
+  --accent-ink:#1d1800;
+  --blue:#0a84ff;
+  --red:#ff453a;
+  --font:-apple-system,BlinkMacSystemFont,"SF Pro Text","Inter","Segoe UI",Roboto,system-ui,sans-serif;
+  --mono:"SF Mono",ui-monospace,Menlo,Consolas,monospace;
+  color-scheme:dark;
+}
+[hidden]{display:none!important}
+html,body{height:100%;margin:0}
+body{background:var(--bg);color:var(--fg);font-family:var(--font);overflow:hidden;-webkit-user-select:none;user-select:none;-webkit-tap-highlight-color:transparent}
+button{font:inherit;color:inherit}
+:focus-visible{outline:2px solid var(--blue);outline-offset:2px}
+.app{height:100%;display:grid;grid-template-columns:76px minmax(0,1fr) 344px;grid-template-rows:52px minmax(0,1fr);grid-template-areas:"top top top" "rail stage panel"}
+
+/* top bar */
+.top{grid-area:top;display:flex;align-items:center;gap:8px;padding-inline:16px;background:var(--chrome);border-bottom:1px solid var(--line);min-width:0}
+.brand{font-weight:600;letter-spacing:.02em;font-size:15px;display:flex;align-items:center;gap:8px;margin-right:8px}
+.brand i{width:18px;height:18px;border-radius:50%;background:conic-gradient(from 200deg,#ff453a,#ffd60a,#30d158,#0a84ff,#bf5af2,#ff453a);display:block}
+.grp{display:flex;align-items:center;gap:4px}
+.docinfo{flex:1;text-align:center;color:var(--fg2);font-size:12.5px;font-variant-numeric:tabular-nums;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+.btn{background:transparent;border:0;height:34px;padding:0 12px;border-radius:9px;font-size:14px;font-weight:500;display:inline-flex;align-items:center;gap:6px;cursor:pointer;white-space:nowrap;color:var(--fg)}
+.btn svg{width:18px;height:18px;flex:none}
+.btn:hover{background:var(--surface)}
+.btn:disabled{opacity:.3;cursor:default;background:transparent}
+.btn.icon{padding:0;width:34px;justify-content:center}
+.btn.done{background:var(--accent);color:var(--accent-ink);font-weight:600}
+.btn.done:hover{background:#ffe04d}
+.btn.warn{color:var(--red)}
+.btn.active{background:var(--surface2)}
+
+/* rail */
+.rail{grid-area:rail;display:flex;flex-direction:column;align-items:center;gap:6px;padding-block:14px;background:var(--chrome);border-right:1px solid var(--line)}
+.mode{width:62px;padding:8px 0;background:transparent;border:0;border-radius:12px;display:flex;flex-direction:column;align-items:center;gap:5px;cursor:pointer;color:var(--fg2);font-size:10.5px;font-weight:500}
+.mode svg{width:24px;height:24px}
+.mode:hover{color:var(--fg);background:var(--surface)}
+.mode[aria-pressed="true"]{color:var(--accent)}
+
+/* stage */
+.stage{grid-area:stage;position:relative;background:var(--bg);overflow:hidden;min-width:0;min-height:0}
+#view{position:absolute;inset:0;width:100%;height:100%;touch-action:none;display:block}
+.badge{position:absolute;top:14px;left:50%;transform:translateX(-50%);background:rgba(28,28,30,.88);color:var(--fg);font-size:11px;font-weight:600;letter-spacing:.1em;padding:5px 11px;border-radius:999px;pointer-events:none}
+.drop{position:absolute;inset:12px;border:2px dashed var(--accent);border-radius:16px;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.7);font-size:16px;font-weight:500;pointer-events:none}
+.toast{position:absolute;bottom:18px;left:50%;transform:translateX(-50%);background:var(--surface2);color:var(--fg);padding:9px 14px;border-radius:12px;font-size:13px;max-width:calc(100% - 32px);text-align:center;pointer-events:none;box-shadow:0 8px 24px rgba(0,0,0,.5)}
+.hint-stage{position:absolute;bottom:14px;left:50%;transform:translateX(-50%);color:var(--fg3);font-size:12px;pointer-events:none;white-space:nowrap}
+
+/* panel */
+.panel{grid-area:panel;background:var(--chrome);border-left:1px solid var(--line);display:flex;flex-direction:column;min-height:0;overflow-y:auto}
+.sec{padding:16px;border-bottom:1px solid var(--line);display:flex;flex-direction:column;gap:12px}
+.sec h3{margin:0;font-size:11px;letter-spacing:.09em;text-transform:uppercase;color:var(--fg2);font-weight:600;display:flex;justify-content:space-between;align-items:baseline}
+.sec h3 span{font-variant-numeric:tabular-nums;letter-spacing:0;text-transform:none;font-size:12px;color:var(--fg3)}
+#histo{width:100%;height:84px;display:block;background:#08080a;border-radius:8px}
+.pane{display:flex;flex-direction:column;gap:14px}
+.rhead{display:flex;justify-content:space-between;align-items:baseline;gap:12px}
+.rhead b{font-size:11px;letter-spacing:.09em;text-transform:uppercase;font-weight:600;color:var(--fg2)}
+.rhead output{font-size:15px;font-weight:600;font-variant-numeric:tabular-nums;color:var(--fg);min-width:3ch;text-align:right}
+.ruler{width:100%;height:58px;display:block;cursor:ew-resize;touch-action:none;border-radius:8px;-webkit-mask-image:linear-gradient(90deg,transparent,#000 16%,#000 84%,transparent);mask-image:linear-gradient(90deg,transparent,#000 16%,#000 84%,transparent)}
+.ruler.off{opacity:.3;pointer-events:none}
+
+/* adjustment chips */
+.chips{display:grid;grid-template-columns:repeat(4,1fr);gap:14px 6px}
+.chip{background:transparent;border:0;padding:0;display:flex;flex-direction:column;align-items:center;gap:6px;cursor:pointer;color:var(--fg2);min-width:0}
+.dial{position:relative;width:52px;height:52px;border-radius:50%;background:var(--surface);display:flex;align-items:center;justify-content:center;color:var(--fg);transition:background .15s}
+.dial svg.ring{position:absolute;inset:0;width:52px;height:52px;transform:rotate(-90deg)}
+.dial svg.ring.neg{transform:rotate(-90deg) scaleY(-1)}
+.ring circle{fill:none;stroke-width:2.4}
+.ring .bg{stroke:transparent}
+.ring .val{stroke:var(--fg2);stroke-linecap:round;transition:stroke-dasharray .08s}
+.dial .ico svg{width:22px;height:22px;display:block}
+.dial .num{font-size:15px;font-weight:600;font-variant-numeric:tabular-nums}
+.chip .lbl{font-size:10.5px;line-height:1.2;text-align:center;max-width:76px;font-size:10px;overflow-wrap:break-word;-webkit-hyphens:auto;hyphens:auto}
+.chip:hover .dial{background:var(--surface2)}
+.chip.sel .lbl{color:var(--fg)}
+.chip.sel .dial{box-shadow:0 0 0 1.5px rgba(255,255,255,.25) inset}
+.chip.has .ring .val{stroke:var(--accent)}
+.chip.sel.has .ring .val{stroke:var(--accent)}
+.chip.dis .dial{opacity:.4}
+.chip.dis .ring .val{stroke:var(--fg3)}
+.chip.auto.has .dial{background:var(--accent);color:var(--accent-ink)}
+
+/* filters */
+.filters{display:grid;grid-template-columns:repeat(3,1fr);gap:12px 10px}
+.flt{background:transparent;border:0;padding:0;display:flex;flex-direction:column;gap:6px;cursor:pointer;color:var(--fg2);font-size:11px;text-align:center;min-width:0}
+.flt canvas{width:100%;aspect-ratio:1;border-radius:6px;display:block;background:var(--surface);max-width:100%}
+.flt.sel{color:var(--accent);font-weight:600}
+.flt.sel canvas{box-shadow:0 0 0 2px var(--accent)}
+.flt span{line-height:1.2;min-height:2.4em}
+
+/* crop */
+.row{display:flex;gap:8px;flex-wrap:wrap}
+.tool{background:var(--surface);border:0;border-radius:10px;height:40px;padding:0 12px;display:inline-flex;align-items:center;gap:8px;cursor:pointer;font-size:13px;font-weight:500;color:var(--fg)}
+.tool svg{width:20px;height:20px}
+.tool:hover{background:var(--surface2)}
+.tool[aria-pressed="true"]{background:var(--fg);color:#000}
+.pills{display:flex;flex-wrap:wrap;gap:6px}
+.pill{background:var(--surface);border:0;border-radius:999px;height:30px;padding:0 12px;font-size:12.5px;font-weight:500;cursor:pointer;color:var(--fg2);font-variant-numeric:tabular-nums}
+.pill:hover{color:var(--fg)}
+.pill[aria-pressed="true"]{background:var(--fg);color:#000}
+
+/* markup */
+.swatches{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+.sw{width:30px;height:30px;border-radius:50%;border:0;cursor:pointer;box-shadow:0 0 0 1px rgba(255,255,255,.18) inset;padding:0}
+.sw[aria-pressed="true"]{box-shadow:0 0 0 2px var(--bg),0 0 0 4px var(--fg)}
+.sw.custom{background:conic-gradient(#ff453a,#ffd60a,#30d158,#0a84ff,#bf5af2,#ff453a);position:relative;overflow:hidden}
+.sw.custom input{position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;height:100%}
+input[type=range]{width:100%;accent-color:var(--accent)}
+.note{font-size:12px;color:var(--fg3);line-height:1.45;margin:0}
+
+/* history */
+.history{flex:1}
+#history{list-style:none;margin:0;padding:0;max-height:240px;overflow-y:auto;position:relative;display:flex;flex-direction:column;gap:2px;font-size:13px}
+#history li button{width:100%;text-align:left;background:transparent;border:0;border-radius:7px;padding:6px 8px;cursor:pointer;color:var(--fg);display:flex;gap:8px;align-items:center;font-variant-numeric:tabular-nums}
+#history li button:hover{background:var(--surface)}
+#history li.cur button{background:var(--surface2)}
+#history li.fut button{color:var(--fg3)}
+#history li button::before{content:"";width:6px;height:6px;border-radius:50%;background:var(--fg3);flex:none}
+#history li.cur button::before{background:var(--accent)}
+
+/* modal */
+.modal{position:fixed;inset:0;background:rgba(0,0,0,.72);display:flex;align-items:center;justify-content:center;z-index:20;padding:16px}
+.sheet{background:var(--surface);border-radius:16px;width:min(560px,100%);max-height:100%;overflow:auto;padding:18px;display:flex;flex-direction:column;gap:14px;box-shadow:0 20px 60px rgba(0,0,0,.6)}
+.sheet-head{display:flex;justify-content:space-between;align-items:center}
+.sheet h2{margin:0;font-size:17px;font-weight:600}
+.exp-preview{background:#000;border-radius:10px;min-height:180px;display:flex;align-items:center;justify-content:center;overflow:hidden}
+.exp-preview img{max-width:100%;max-height:46vh;display:block;-webkit-user-select:auto;user-select:auto;-webkit-touch-callout:default}
+.seg{display:inline-flex;background:var(--bg);border-radius:9px;padding:2px;align-self:flex-start}
+.seg button{background:transparent;border:0;border-radius:7px;height:30px;padding:0 14px;font-size:13px;font-weight:500;cursor:pointer;color:var(--fg2)}
+.seg button[aria-pressed="true"]{background:var(--surface2);color:var(--fg)}
+.meta{margin:0;font-size:12.5px;color:var(--fg2);font-variant-numeric:tabular-nums}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
+
+/* phone: iPhone Photos layout */
+@media (max-width:860px){
+  .app{grid-template-columns:minmax(0,1fr);grid-template-rows:auto minmax(0,1fr) auto auto;grid-template-areas:"top" "stage" "panel" "rail"}
+  .top{height:50px;padding-inline:max(12px,env(safe-area-inset-left,0px)) max(12px,env(safe-area-inset-right,0px));gap:2px}
+  .brand span,.docinfo,.txt{display:none}
+  .brand{margin-right:auto}
+  .panel{border-left:0;border-top:1px solid var(--line);overflow:visible}
+  .sec{padding:12px 16px;border-bottom:0}
+  .histo,.history,.sec h3.mode-title{display:none}
+  .rail{flex-direction:row;justify-content:space-around;border-right:0;border-top:1px solid var(--line);padding:6px 16px}
+  .mode{width:auto;flex:1}
+  .chips{display:flex;overflow-x:auto;gap:10px;scroll-snap-type:x proximity;padding:2px 2px 4px;scrollbar-width:none}
+  .chips::-webkit-scrollbar,.filters::-webkit-scrollbar{display:none}
+  .chip{flex:none;scroll-snap-align:center}
+  .chip .lbl{display:none}
+  .filters{display:flex;overflow-x:auto;gap:10px;scrollbar-width:none}
+  .flt{flex:none;width:76px}
+  .ruler{height:50px}
+  .pane{gap:10px}
+  .hint-stage{display:none}
+}
+/* photoshop pack */
+.rail{gap:2px;padding-block:10px}
+.mode{padding:6px 0;gap:4px}
+.cbody{display:flex;flex-direction:column;gap:12px}
+.txt-in,.num-in{height:34px;background:var(--surface);border:1px solid var(--line);border-radius:9px;color:var(--fg);padding:0 10px;font:inherit;font-size:14px;-webkit-user-select:text;user-select:text}
+.txt-in{width:100%}
+.num-in{width:96px;font-variant-numeric:tabular-nums}
+.txt-in:focus,.num-in:focus{outline:2px solid var(--blue);outline-offset:0}
+.chk{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--fg2);cursor:pointer}
+.chk input{accent-color:var(--accent);width:16px;height:16px}
+.zoombar #zGrid[aria-pressed="true"]{color:var(--accent)}
+.gate{position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;text-align:center;padding:24px;background:var(--bg);color:var(--fg)}
+.gate i{width:56px;height:56px;border-radius:50%;background:conic-gradient(from 200deg,#ff453a,#ffd60a,#30d158,#0a84ff,#bf5af2,#ff453a)}
+.gate h1{margin:0;font-size:22px}
+.gate p{margin:0;color:var(--fg2);max-width:42ch;line-height:1.5}
+/* curves + zoom */
+.curve{width:100%;aspect-ratio:1;max-width:100%;display:block;touch-action:none;border-radius:8px;background:#08080a;cursor:crosshair}
+.zoombar{position:absolute;right:max(14px,env(safe-area-inset-right,0px));bottom:12px;display:flex;align-items:center;gap:2px;background:rgba(28,28,30,.9);border-radius:10px;padding:3px;box-shadow:0 6px 20px rgba(0,0,0,.45)}
+.zoombar button{background:transparent;border:0;height:28px;min-width:30px;padding:0 8px;border-radius:7px;cursor:pointer;font-size:13px;font-weight:500;color:var(--fg);font-variant-numeric:tabular-nums}
+.zoombar button:hover{background:var(--surface2)}
+.zoombar #zPct{min-width:58px;color:var(--fg2)}
+.stage.grab #view{cursor:grab!important}
+.stage.grabbing #view{cursor:grabbing!important}
+@media (max-width:860px){.curve{width:min(100%,250px);align-self:center}.zoombar{bottom:8px}.zoombar #z100{display:none}}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+
+<div class="app" id="app" lang="ru">
+  <header class="top">
+    <div class="brand"><i></i><span>Lumen</span></div>
+    <div class="grp">
+      <button class="btn" id="btnOpen" title="Открыть фото (или перетащите файл в окно)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2.5"/><circle cx="8.5" cy="10" r="1.6"/><path d="m21 16-5-5-8 8"/></svg><span class="txt">Открыть</span></button>
+      <input type="file" id="file" accept="image/*,.heic,.heif,.dng,.cr2,.cr3,.crw,.nef,.nrw,.arw,.srf,.sr2,.raf,.orf,.rw2,.raw,.pef,.srw,.3fr,.iiq,.erf,.mos,.mrw,.x3f" hidden>
+      <button class="btn icon" id="btnUndo" title="Отменить (Ctrl+Z)" aria-label="Отменить"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/></svg></button>
+      <button class="btn icon" id="btnRedo" title="Повторить (Ctrl+Shift+Z)" aria-label="Повторить"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m15 14 5-5-5-5"/><path d="M20 9H9.5a5.5 5.5 0 0 0 0 11H13"/></svg></button>
+    </div>
+    <div class="docinfo" id="docinfo">—</div>
+    <div class="grp">
+      <button class="btn" id="btnCompare" title="Удерживайте, чтобы увидеть оригинал (или клавиша \)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><rect x="3" y="4" width="18" height="16" rx="2.5"/><path d="M12 4v16"/><path d="M12 4h6.5A2.5 2.5 0 0 1 21 6.5v11a2.5 2.5 0 0 1-2.5 2.5H12z" fill="currentColor" stroke="none"/></svg><span class="txt">Сравнить</span></button>
+      <button class="btn" id="btnRevert"><span>Вернуть</span></button>
+      <button class="btn done" id="btnExport">Готово</button>
+    </div>
+  </header>
+
+  <nav class="rail" aria-label="Режимы">
+    <button class="mode" data-mode="adjust" aria-pressed="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="12" cy="12" r="8.5"/><path d="M12 3.5a8.5 8.5 0 0 1 0 17z" fill="currentColor"/></svg>Настройки</button>
+    <button class="mode" data-mode="filters" aria-pressed="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="12" cy="8.5" r="5"/><circle cx="8.5" cy="14.5" r="5"/><circle cx="15.5" cy="14.5" r="5"/></svg>Фильтры</button>
+    <button class="mode" data-mode="curves" aria-pressed="false" title="Кривые (Ctrl+M)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><rect x="3" y="3" width="18" height="18" rx="2.5"/><path d="M5.5 18.5C10 18 10 6 18.5 5.5"/><circle cx="10.6" cy="12.4" r="1.6" fill="currentColor"/></svg>Кривые</button>
+    <button class="mode" data-mode="corr" aria-pressed="false" title="Коррекция: уровни, баланс, тон (Ctrl+L, Ctrl+B, Ctrl+U)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><path d="M4 18h16"/><path d="M6.5 18v-4M10 18V9M13.5 18V5.5M17 18v-6"/><path d="m4 21.5 2.2-2.2 2.2 2.2zM15.6 21.5l2.2-2.2 2.2 2.2z" fill="currentColor"/></svg>Коррекция</button>
+    <button class="mode" data-mode="fx" aria-pressed="false" title="Фильтры Photoshop: размытие, шум, мозаика"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.5 14 9l5.5 2-5.5 2-2 5.5-2-5.5-5.5-2L10 9z"/><path d="M19 3v3M17.5 4.5h3"/></svg>Эффекты</button>
+    <button class="mode" data-mode="crop" aria-pressed="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M6 2.5V18h15.5"/><path d="M2.5 6H18v15.5"/><path d="M14 3.5a7 7 0 0 1 6.5 6.5"/><path d="m18.5 8.5 2 1.6 1.6-2"/></svg>Обрезка</button>
+    <button class="mode" data-mode="retouch" aria-pressed="false" title="Ретушь: штамп, восстанавливающая кисть, осветлитель (S, J, O)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"><path d="M9 3h6v5l3 3v3H6v-3l3-3z"/><path d="M5 17.5h14v3.5H5z"/></svg>Ретушь</button>
+    <button class="mode" data-mode="markup" aria-pressed="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M15.5 4.5 19.5 8.5 9 19H5v-4z"/><path d="m13 7 4 4"/></svg>Разметка</button>
+  </nav>
+
+  <main class="stage" id="stage">
+    <canvas id="view" aria-label="Холст с фотографией"></canvas>
+    <div class="badge" id="badge" hidden>ОРИГИНАЛ</div>
+    <div class="drop" id="drop" hidden>Отпустите, чтобы открыть фото</div>
+    <div class="toast" id="toast" hidden></div>
+    <div class="hint-stage" id="stageHint">Удерживайте фото, чтобы сравнить с оригиналом</div>
+    <div class="zoombar" id="zoombar">
+      <button id="zOut" title="Уменьшить (Ctrl −)" aria-label="Уменьшить">−</button>
+      <button id="zPct" title="Вписать в окно (Ctrl 0)">Вписать</button>
+      <button id="zIn" title="Увеличить (Ctrl +)" aria-label="Увеличить">+</button>
+      <button id="z100" title="Реальный размер (Ctrl 1)">100%</button>
+      <button id="zGrid" title="Сетка (Ctrl ')" aria-label="Сетка" aria-pressed="false">#</button>
+    </div>
+  </main>
+
+  <aside class="panel" id="panel">
+    <section class="sec histo">
+      <h3>Гистограмма <span id="histInfo"></span></h3>
+      <canvas id="histo"></canvas>
+    </section>
+
+    <section class="sec">
+      <div class="pane" data-pane="adjust">
+        <div class="chips" id="chips"></div>
+        <div class="rhead"><b id="adjName">Экспозиция</b><output id="adjVal">0</output></div>
+        <canvas class="ruler" id="adjRuler" role="slider" aria-label="Значение настройки"></canvas>
+        <p class="note">Повторное нажатие на выбранную настройку выключает её, как на iPhone. Двойной клик по шкале — сброс.</p>
+      </div>
+
+      <div class="pane" data-pane="filters" hidden>
+        <div class="rhead"><b id="fltName">Оригинал</b><output id="fltVal">100</output></div>
+        <canvas class="ruler" id="fltRuler" role="slider" aria-label="Интенсивность фильтра"></canvas>
+        <div class="filters" id="filters"></div>
+      </div>
+
+      <div class="pane" data-pane="curves" hidden>
+        <div class="rhead"><b>Кривые</b><output id="curveVal">—</output></div>
+        <div class="seg" id="curveCh">
+          <button data-ch="rgb" aria-pressed="true">RGB</button><button data-ch="r" aria-pressed="false">Красный</button><button data-ch="g" aria-pressed="false">Зеленый</button><button data-ch="b" aria-pressed="false">Синий</button>
+        </div>
+        <canvas class="curve" id="curve" aria-label="Редактор кривых"></canvas>
+        <div class="pills" id="curvePresets"></div>
+        <p class="note">Нажмите на кривую, чтобы поставить точку, и тяните её. Двойной клик по точке удаляет её. Как «Кривые» в Photoshop (Ctrl+M).</p>
+      </div>
+
+      <div class="pane" data-pane="corr" hidden>
+        <div class="chips" id="corrChips"></div>
+        <div class="rhead"><b id="corrName">Уровни</b><button class="pill" id="corrReset">Сбросить</button></div>
+        <div id="corrBodies"></div>
+      </div>
+
+      <div class="pane" data-pane="fx" hidden>
+        <div class="chips" id="fxChips"></div>
+        <div class="rhead"><b id="fxName">Размытие по Гауссу</b><output id="fxVal">0</output></div>
+        <canvas class="ruler" id="fxRuler" role="slider" aria-label="Сила эффекта"></canvas>
+        <p class="note">Эффекты из меню «Фильтр» Photoshop. Ложатся поверх всех настроек и коррекций.</p>
+      </div>
+
+      <div class="pane" data-pane="retouch" hidden>
+        <div class="row" id="rtools"></div>
+        <div class="rhead"><b>Размер кисти</b><output id="rtSizeVal">40</output></div>
+        <input type="range" id="rtSize" min="4" max="240" value="40" aria-label="Размер кисти">
+        <div class="rhead"><b>Жесткость</b><output id="rtHardVal">40</output></div>
+        <input type="range" id="rtHard" min="0" max="100" value="40" aria-label="Жесткость кисти">
+        <div class="rhead"><b>Сила</b><output id="rtStrVal">100</output></div>
+        <input type="range" id="rtStr" min="5" max="100" value="100" aria-label="Сила кисти">
+        <div class="row"><button class="tool" id="btnClearRetouch">Убрать ретушь</button></div>
+        <p class="note" id="rtNote"></p>
+      </div>
+
+      <div class="pane" data-pane="crop" hidden>
+        <div class="row">
+          <button class="tool" id="btnRotate" title="Повернуть на 90° влево"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="1.5"/><path d="M4 12V9a5 5 0 0 1 5-5h3"/><path d="m9.5 1.5 2.5 2.5-2.5 2.5"/></svg>Влево</button>
+          <button class="tool" id="btnRotateR" title="Повернуть на 90° вправо"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="9" width="11" height="11" rx="1.5"/><path d="M20 12V9a5 5 0 0 0-5-5h-3"/><path d="m14.5 1.5-2.5 2.5 2.5 2.5"/></svg>Вправо</button>
+          <button class="tool" id="btnFlip" title="Отразить по горизонтали"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"><path d="M12 3v18" stroke-dasharray="2 2"/><path d="M9 6 3 18h6z"/><path d="M15 6l6 12h-6z" fill="currentColor"/></svg>Отразить</button>
+          <button class="tool" id="btnFlipV" title="Отразить по вертикали"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"><path d="M3 12h18" stroke-dasharray="2 2"/><path d="M6 9 18 3v6z"/><path d="M6 15l12 6v-6z" fill="currentColor"/></svg>По вертикали</button>
+          <button class="tool" id="btnCropReset">Сбросить</button>
+        </div>
+        <div class="rhead"><b>Выпрямление</b><output id="angVal">0°</output></div>
+        <canvas class="ruler" id="angRuler" role="slider" aria-label="Угол выпрямления"></canvas>
+        <div class="rhead"><b>Формат</b></div>
+        <div class="pills" id="ratios"></div>
+        <p class="note">Тяните углы и края рамки, чтобы обрезать. Перетащите рамку изнутри, чтобы сдвинуть.</p>
+      </div>
+
+      <div class="pane" data-pane="markup" hidden>
+        <div class="row" id="mtools"></div>
+        <div class="swatches" id="swatches"></div>
+        <div class="rhead"><b>Толщина</b><output id="sizeVal">8</output></div>
+        <input type="range" id="markSize" min="2" max="40" value="8" aria-label="Толщина кисти">
+        <div class="rhead"><b>Текст надписи</b></div>
+        <input type="text" id="markText" class="txt-in" value="Lumen" aria-label="Текст надписи">
+        <label class="chk"><input type="checkbox" id="markFill"> Заливать фигуры</label>
+        <div class="row"><button class="tool" id="btnClearMarks">Очистить разметку</button></div>
+      </div>
+    </section>
+
+    <section class="sec history">
+      <h3>История <span id="histCount"></span></h3>
+      <ol id="history"></ol>
+    </section>
+  </aside>
+</div>
+
+<div class="modal" id="exp" hidden>
+  <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="expTitle">
+    <div class="sheet-head"><h2 id="expTitle">Экспорт фото</h2><button class="btn" id="expClose">Закрыть</button></div>
+    <div class="exp-preview"><img id="expImg" alt="Готовое изображение" hidden><span id="expBusy" class="meta">Обрабатываю в полном размере…</span></div>
+    <div class="seg" id="expFmt"><button data-f="jpeg" aria-pressed="true">JPEG</button><button data-f="png" aria-pressed="false">PNG</button></div>
+    <div class="row" style="align-items:center">
+      <label class="meta" for="expW">Размер изображения: ширина</label>
+      <input type="number" id="expW" class="num-in" min="16" max="20000" step="1">
+      <span class="meta" id="expH"></span>
+      <div class="pills" id="expScale"><button class="pill" data-s="1">100%</button><button class="pill" data-s="0.5">50%</button><button class="pill" data-s="0.25">25%</button></div>
+    </div>
+    <p class="meta" id="expMeta"></p>
+    <div class="row"><button class="btn done" id="expSave">Сохранить файл</button><button class="btn" id="expCopy">Скопировать</button></div>
+  </div>
+</div>
+
+<script>
+(() => {
+'use strict';
+const $ = s => document.querySelector(s);
+const clamp = (v, a, b) => v < a ? a : v > b ? b : v;
+const smooth = (a, b, x) => { const t = clamp((x - a) / (b - a), 0, 1); return t * t * (3 - 2 * t); };
+const mk = (w, h) => { const c = document.createElement('canvas'); c.width = w; c.height = h; return c; };
+const SVGA = 'viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"';
+// Extension points used by the modules in js/*.js (layers, masks, AI selection, formats, account)
+const HOOKS = {state: [], remap: [], out: [], outKey: [], overlay: [], afterDraw: [], pointer: {}, sync: [], decode: [], mode: [], image: [], keydown: [], gate: null};
+
+/* ---------- iOS adjustment set (same order as Photos) ---------- */
+const IC = {
+  auto:'<path d="M4.5 19.5 14 10"/><path d="m12.5 8.5 3 3"/><path d="M16 3v2.5M19.8 5.2 18 7M21 9h-2.5M8.5 4.5 10 6"/>',
+  exposure:'<circle cx="12" cy="12" r="8.5"/><path d="M7.5 9.5h4M9.5 7.5v4M12.5 15.5h4"/><path d="M6 18 18 6"/>',
+  brilliance:'<circle cx="12" cy="12" r="7.5"/><path d="M12 4.5a7.5 7.5 0 0 1 0 15z" fill="currentColor"/><path d="M19 1.8v2.6M17.7 3.1h2.6"/>',
+  highlights:'<circle cx="12" cy="12" r="8.5"/><path d="M6 7.5h12M4.2 10.5h15.6M3.6 13.5h16.8"/>',
+  shadows:'<circle cx="12" cy="12" r="8.5"/><path d="M3.6 12.5h16.8M4.2 15.5h15.6M6 18.5h12"/>',
+  contrast:'<circle cx="12" cy="12" r="8.5"/><path d="M12 3.5a8.5 8.5 0 0 0 0 17z" fill="currentColor"/>',
+  brightness:'<circle cx="12" cy="12" r="4"/><path d="M12 2.5v2.2M12 19.3v2.2M2.5 12h2.2M19.3 12h2.2M5.3 5.3l1.6 1.6M17.1 17.1l1.6 1.6M5.3 18.7l1.6-1.6M17.1 6.9l1.6-1.6"/>',
+  blackpoint:'<circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="4.5" fill="currentColor"/>',
+  saturation:'<circle cx="12" cy="12" r="8.5"/><path d="M12 3.5v17M7.5 4.8v14.4M16.5 4.8v14.4"/>',
+  vibrance:'<path d="M12 3.5 21 19H3z"/><path d="m12 10.5 3.6 6H8.4z" fill="currentColor"/>',
+  warmth:'<path d="M10 14.3V5a2 2 0 0 1 4 0v9.3a4.2 4.2 0 1 1-4 0z"/><path d="M12 9.5v7"/>',
+  tint:'<path d="M12 3c3.2 4.3 6.2 7.4 6.2 11.2a6.2 6.2 0 0 1-12.4 0C5.8 10.4 8.8 7.3 12 3z"/><path d="M12 20.4a6.2 6.2 0 0 1-6.2-6.2c0-1 .2-1.9.6-2.8L12 20.4z" fill="currentColor"/>',
+  sharpness:'<path d="M12 3.5 21 19H3z"/>',
+  definition:'<path d="M12 3.5 21 19H3z"/><path d="M8.6 13h6.8M6.8 16.2h10.4"/>',
+  noise:'<g fill="currentColor" stroke="none"><circle cx="6" cy="6" r="1.4"/><circle cx="12" cy="6" r="1.4"/><circle cx="18" cy="6" r="1.4"/><circle cx="6" cy="12" r="1.4"/><circle cx="12" cy="12" r="1.4"/><circle cx="18" cy="12" r="1.4"/><circle cx="6" cy="18" r="1.4"/><circle cx="12" cy="18" r="1.4"/><circle cx="18" cy="18" r="1.4"/></g>',
+  vignette:'<rect x="3" y="5" width="18" height="14" rx="2.5"/><ellipse cx="12" cy="12" rx="5.5" ry="4" fill="currentColor" opacity=".35"/><ellipse cx="12" cy="12" rx="5.5" ry="4"/>',
+};
+const ADJ = [
+  {id:'exposure',name:'Экспозиция',min:-100},
+  {id:'brilliance',name:'Блеск',min:-100},
+  {id:'highlights',name:'Светлые участки',min:-100},
+  {id:'shadows',name:'Тени',min:-100},
+  {id:'contrast',name:'Контрастность',min:-100},
+  {id:'brightness',name:'Яркость',min:-100},
+  {id:'blackpoint',name:'Точка черного',min:-100},
+  {id:'saturation',name:'Насыщенность',min:-100},
+  {id:'vibrance',name:'Сочность',min:-100},
+  {id:'warmth',name:'Теплота',min:-100},
+  {id:'tint',name:'Оттенок',min:-100},
+  {id:'sharpness',name:'Резкость',min:0},
+  {id:'definition',name:'Четкость',min:-100},
+  {id:'noise',name:'Шумоподавление',min:0},
+  {id:'vignette',name:'Виньетка',min:-100},
+];
+const ADJ_BY = Object.fromEntries(ADJ.map(a => [a.id, a]));
+
+/* ---------- iOS filter set ---------- */
+const FILTERS = [
+  {id:'none',name:'Оригинал'},
+  {id:'vivid',name:'Яркий',con:.18,gamma:.97,sat:1.38,tone:[1,1,1]},
+  {id:'vivid-warm',name:'Яркий теплый',con:.18,gamma:.97,sat:1.32,tone:[1.07,1.01,.87]},
+  {id:'vivid-cool',name:'Яркий холодный',con:.18,gamma:.97,sat:1.3,tone:[.91,1,1.1]},
+  {id:'dramatic',name:'Драматичный',con:.5,gamma:1.16,hl:.14,sat:.7,tone:[1,1,1]},
+  {id:'dramatic-warm',name:'Драматичный теплый',con:.5,gamma:1.12,hl:.12,sat:.8,tone:[1.08,1,.83]},
+  {id:'dramatic-cool',name:'Драматичный холодный',con:.5,gamma:1.12,hl:.12,sat:.76,tone:[.87,.98,1.12]},
+  {id:'mono',name:'Моно',mono:true,con:.06,tone:[1,1,1]},
+  {id:'silvertone',name:'Серебристый',mono:true,con:.14,lift:.05,gamma:.94,tone:[.97,1,1.05]},
+  {id:'noir',name:'Нуар',mono:true,con:.78,crush:.06,gamma:1.12,tone:[1,1,1]},
+];
+FILTERS.forEach(F => {
+  if (F.id === 'none') return;
+  if (F.sat === undefined) F.sat = 1;
+  const l = new Float32Array(1024);
+  for (let i = 0; i < 1024; i++) {
+    let y = i / 1023;
+    if (F.gamma) y = Math.pow(y, F.gamma);
+    if (F.crush) y = Math.max(0, (y - F.crush) / (1 - F.crush));
+    if (F.con) { y = clamp(.5 + (y - .5) * (1 + F.con * .25), 0, 1); const s = y < .5 ? 2*y*y : 1 - 2*(1-y)*(1-y); y += (s - y) * F.con * .8; }
+    if (F.hl) y = y * (1 - F.hl * y * y);
+    if (F.lift) y = F.lift + y * (1 - F.lift);
+    l[i] = y;
+  }
+  F.lut = l;
+});
+const F_BY = Object.fromEntries(FILTERS.map(f => [f.id, f]));
+
+const RATIOS = [
+  {id:'free',name:'Свободно'},{id:'orig',name:'Оригинал'},{id:'1:1',name:'Квадрат',r:1},
+  {id:'16:9',name:'16:9',r:16/9},{id:'9:16',name:'9:16',r:9/16},{id:'4:3',name:'4:3',r:4/3},
+  {id:'3:4',name:'3:4',r:3/4},{id:'5:4',name:'5:4',r:5/4},{id:'4:5',name:'4:5',r:4/5},
+];
+
+/* ---------- state + history ---------- */
+function baseState() {
+  const adj = {}; ADJ.forEach(a => adj[a.id] = 0);
+  return {adj, off:{}, auto:null, filter:'none', fi:100,
+    geom:{rot:0, flip:false, angle:0, crop:{x:0,y:0,w:1,h:1}, ratio:'free'}, strokes:[],
+    curves:{rgb:[[0,0],[1,1]], r:[[0,0],[1,1]], g:[[0,0],[1,1]], b:[[0,0],[1,1]]},
+    cor: defaultCor(),
+    fx: {blur:0, motion:0, noise:0, mosaic:0, emboss:0, edges:0}};
+}
+function defaultState() { const st = baseState(); HOOKS.state.forEach(f => f(st)); return st; }
+function defaultCor() {
+  const hsl = {};
+  ['all', 'red', 'yellow', 'green', 'cyan', 'blue', 'magenta'].forEach(id => hsl[id] = [0, 0, 0]);
+  return {levels: [0, 0, 255, 0, 255], balance: {s: [0, 0, 0], m: [0, 0, 0], h: [0, 0, 0]}, hsl,
+    photo: 'none', density: 25, gmap: 'none', gamt: 100, desat: false, invert: false, posterize: 0, threshold: 0};
+}
+
+/* ---------- curves (Photoshop) ---------- */
+function monotone(pts) {
+  const n = pts.length, xs = pts.map(p => p[0]), ys = pts.map(p => p[1]);
+  const d = [], m = new Array(n).fill(0);
+  for (let i = 0; i < n - 1; i++) d[i] = (ys[i+1] - ys[i]) / Math.max(1e-6, xs[i+1] - xs[i]);
+  m[0] = d[0]; m[n-1] = d[n-2];
+  for (let i = 1; i < n - 1; i++) m[i] = d[i-1] * d[i] <= 0 ? 0 : (d[i-1] + d[i]) / 2;
+  for (let i = 0; i < n - 1; i++) {
+    if (d[i] === 0) { m[i] = 0; m[i+1] = 0; continue; }
+    const a = m[i] / d[i], b = m[i+1] / d[i], s = a * a + b * b;
+    if (s > 9) { const t = 3 / Math.sqrt(s); m[i] = t * a * d[i]; m[i+1] = t * b * d[i]; }
+  }
+  return x => {
+    if (x <= xs[0]) return ys[0];
+    if (x >= xs[n-1]) return ys[n-1];
+    let i = 0; while (i < n - 2 && x > xs[i+1]) i++;
+    const h = xs[i+1] - xs[i], t = (x - xs[i]) / h, t2 = t * t, t3 = t2 * t;
+    return (2*t3 - 3*t2 + 1) * ys[i] + (t3 - 2*t2 + t) * h * m[i] + (-2*t3 + 3*t2) * ys[i+1] + (t3 - t2) * h * m[i+1];
+  };
+}
+const isLinear = p => p.length === 2 && p[0][0] === 0 && p[0][1] === 0 && p[1][0] === 1 && p[1][1] === 1;
+let curveCache = {key: null, luts: null};
+function curveLuts(cv) {
+  if (!cv) return null;
+  const key = JSON.stringify(cv);
+  if (key === curveCache.key) return curveCache.luts;
+  let luts = null;
+  if (!['rgb', 'r', 'g', 'b'].every(c => isLinear(cv[c]))) {
+    const f = monotone(cv.rgb), fc = [monotone(cv.r), monotone(cv.g), monotone(cv.b)];
+    luts = [new Float32Array(1024), new Float32Array(1024), new Float32Array(1024)];
+    for (let i = 0; i < 1024; i++) {
+      const y = clamp(f(i / 1023), 0, 1);
+      for (let c = 0; c < 3; c++) luts[c][i] = clamp(fc[c](y), 0, 1);
+    }
+  }
+  curveCache = {key, luts};
+  return luts;
+}
+let S = defaultState();
+let hist = [], hIdx = -1;
+function push(label) {
+  hist = hist.slice(0, hIdx + 1);
+  hist.push({label, s: JSON.stringify(S)});
+  if (hist.length > 80) hist.shift();
+  hIdx = hist.length - 1;
+  renderHistory();
+}
+function restore(i) {
+  if (i < 0 || i >= hist.length) return;
+  hIdx = i; S = JSON.parse(hist[i].s);
+  syncUI(); invalidate(true); renderHistory();
+}
+
+/* ---------- image data ---------- */
+let img = null;           // {name, full, prev, prevData, thumbData}
+let procC = null, procX = null, procD = null;
+let spCache = {key:null, data:null};
+let dirty = true, raf = 0, procVer = 0, showGrid = false, hoverP = null;
+const RT = new Set(['clone', 'heal', 'spot', 'redness', 'skin', 'blurb', 'dodge', 'burn', 'sponge']);
+const SHAPES = new Set(['rect', 'ellipse', 'line', 'arrow']);
+let mode = 'adjust', selAdj = 'exposure', comparing = false;
+let markTool = 'pen', markColor = '#ff453a', markSize = 8;
+let curStroke = null, cropDrag = null, erasing = false;
+
+function setImage(source, name, opts) {
+  const sw = source.naturalWidth || source.width, sh = source.naturalHeight || source.height;
+  const FULL = 4608, PREV = 1400;
+  let s = Math.min(1, FULL / Math.max(sw, sh));
+  const full = mk(Math.round(sw * s), Math.round(sh * s));
+  full.getContext('2d').drawImage(source, 0, 0, full.width, full.height);
+  s = Math.min(1, PREV / Math.max(sw, sh));
+  const prev = mk(Math.round(sw * s), Math.round(sh * s));
+  const px = prev.getContext('2d', {willReadFrequently:true});
+  px.imageSmoothingQuality = 'high';
+  px.drawImage(full, 0, 0, prev.width, prev.height);
+  const prevData = px.getImageData(0, 0, prev.width, prev.height);
+  const T = 112, th = mk(T, T), tx = th.getContext('2d', {willReadFrequently:true});
+  const m = Math.min(prev.width, prev.height);
+  tx.drawImage(prev, (prev.width - m) / 2, (prev.height - m) / 2, m, m, 0, 0, T, T);
+  img = {name, full, prev, prevData, thumbData: tx.getImageData(0, 0, T, T), srcW: sw, srcH: sh};
+  procC = mk(prev.width, prev.height);
+  procX = procC.getContext('2d');
+  procD = new ImageData(prev.width, prev.height);
+  spCache = {key:null, data:null};
+  S = defaultState(); hist = []; hIdx = -1; vz = 1; panX = panY = 0;
+  HOOKS.image.forEach(f => f(opts || {}));
+  push(opts && opts.label ? opts.label : 'Открыто: ' + name);
+  syncUI(); invalidate(true);
+}
+
+/* ---------- processing ---------- */
+function params(st) {
+  const o = {};
+  ADJ.forEach(a => o[a.id] = st.off[a.id] ? 0 : st.adj[a.id] / 100);
+  o.F = st.filter === 'none' ? null : F_BY[st.filter];
+  o.fi = st.fi / 100;
+  o.curves = curveLuts(st.curves);
+  return o;
+}
+
+function boxBlur(src, w, h, r) {
+  const tmp = new Float32Array(src.length), dst = new Float32Array(src.length);
+  const inv = 1 / (r + r + 1);
+  for (let y = 0; y < h; y++) {
+    const row = y * w * 3;
+    for (let c = 0; c < 3; c++) {
+      let sum = 0;
+      for (let x = -r; x <= r; x++) sum += src[row + clamp(x, 0, w - 1) * 3 + c];
+      for (let x = 0; x < w; x++) {
+        tmp[row + x * 3 + c] = sum * inv;
+        const xo = x - r < 0 ? 0 : x - r, xi = x + r + 1 > w - 1 ? w - 1 : x + r + 1;
+        sum += src[row + xi * 3 + c] - src[row + xo * 3 + c];
+      }
+    }
+  }
+  const st = w * 3;
+  for (let x = 0; x < w; x++) {
+    for (let c = 0; c < 3; c++) {
+      const col = x * 3 + c;
+      let sum = 0;
+      for (let y = -r; y <= r; y++) sum += tmp[clamp(y, 0, h - 1) * st + col];
+      for (let y = 0; y < h; y++) {
+        dst[y * st + col] = sum * inv;
+        const yo = y - r < 0 ? 0 : y - r, yi = y + r + 1 > h - 1 ? h - 1 : y + r + 1;
+        sum += tmp[yi * st + col] - tmp[yo * st + col];
+      }
+    }
+  }
+  return dst;
+}
+
+// Sharpness, Definition, Noise Reduction: spatial passes, scaled to image size so preview matches export
+function spatial(rgba, w, h, p) {
+  const n = w * h, cur = new Float32Array(n * 3);
+  for (let i = 0, j = 0; i < n; i++, j += 4) { cur[i*3] = rgba[j]; cur[i*3+1] = rgba[j+1]; cur[i*3+2] = rgba[j+2]; }
+  const sc = Math.max(w, h) / 1400;
+  if (p.noise > 0) {
+    const r = Math.max(1, Math.round(1.6 * sc));
+    const b = boxBlur(boxBlur(cur, w, h, r), w, h, r);
+    const amt = p.noise * .92, thr = 8 + p.noise * 26;
+    for (let k = 0; k < n * 3; k += 3) {
+      const d = (Math.abs(cur[k]-b[k]) + Math.abs(cur[k+1]-b[k+1]) + Math.abs(cur[k+2]-b[k+2])) / 3;
+      const wgt = amt * Math.exp(-d / thr);
+      cur[k] += (b[k]-cur[k]) * wgt; cur[k+1] += (b[k+1]-cur[k+1]) * wgt; cur[k+2] += (b[k+2]-cur[k+2]) * wgt;
+    }
+  }
+  if (p.definition !== 0) {
+    const r = Math.max(2, Math.round(16 * sc));
+    const b = boxBlur(boxBlur(cur, w, h, r), w, h, r);
+    const amt = p.definition * (p.definition > 0 ? .85 : .6);
+    for (let k = 0; k < n * 3; k += 3) {
+      const lc = .2126*cur[k] + .7152*cur[k+1] + .0722*cur[k+2];
+      const lb = .2126*b[k] + .7152*b[k+1] + .0722*b[k+2];
+      const d = clamp((lc - lb) * amt, -45, 45);
+      cur[k] += d; cur[k+1] += d; cur[k+2] += d;
+    }
+  }
+  if (p.sharpness > 0) {
+    const r = Math.max(1, Math.round(sc));
+    const b = boxBlur(cur, w, h, r);
+    const amt = p.sharpness * 1.9;
+    for (let k = 0; k < n * 3; k += 3) {
+      const lc = .2126*cur[k] + .7152*cur[k+1] + .0722*cur[k+2];
+      const lb = .2126*b[k] + .7152*b[k+1] + .0722*b[k+2];
+      const d = clamp((lc - lb) * amt, -60, 60);
+      cur[k] += d; cur[k+1] += d; cur[k+2] += d;
+    }
+  }
+  return cur;
+}
+
+// Tone + color: LUTs for per-channel curves, luminance LUT for Brilliance/Highlights/Shadows, then color, then filter
+function colorPass(inp, stride, out, n, p, alpha) {
+  const N = 1024, l1 = new Float32Array(N), l2 = new Float32Array(N);
+  const ex = Math.pow(2, p.exposure * 1.3), shoulder = clamp((ex - 1) * 2, 0, 1);
+  const bp = p.blackpoint * .2, br = p.brightness, con = p.contrast;
+  const gam = br >= 0 ? 1 / (1 + br * .7) : 1 - br * .6;
+  for (let i = 0; i < N; i++) {
+    let x = i / (N - 1) * ex;
+    if (shoulder > 0) { const s = x < .8 ? x : .8 + .2 * (1 - Math.exp(-(x - .8) / .2)); x += (s - x) * shoulder; }
+    if (bp > 0) x = (x - bp) / (1 - bp); else if (bp < 0) x = x * (1 + bp) - bp;
+    x = clamp(x, 0, 1);
+    if (gam !== 1) x = Math.pow(x, gam);
+    if (con > 0) { x = clamp(.5 + (x - .5) * (1 + con * .3), 0, 1); const s = x < .5 ? 2*x*x : 1 - 2*(1-x)*(1-x); x += (s - x) * con * .7; }
+    else if (con < 0) x = .5 + (x - .5) * (1 + con * .55);
+    l1[i] = x;
+    const L = i / (N - 1); let d = 0;
+    if (p.brilliance) d += p.brilliance * (1.25 * L * (1-L) * (1-L) - .6 * L * L * (1-L));
+    if (p.highlights) d += p.highlights * .32 * smooth(.4, 1, L);
+    if (p.shadows) d += p.shadows * .3 * (1 - smooth(0, .6, L)) * Math.min(1, .2 + L * 6);
+    l2[i] = d;
+  }
+  const hasD = !!(p.brilliance || p.highlights || p.shadows);
+  const sat = 1 + p.saturation * (p.saturation > 0 ? .9 : 1) + p.brilliance * .12, vib = p.vibrance;
+  const w = p.warmth, t = p.tint;
+  const wr = 1 + w * .11 + t * .03, wg = 1 + w * .015 - t * .09, wb = 1 - w * .14 + t * .03;
+  const F = p.F, fi = p.fi, fl = F && F.lut, CL = p.curves;
+  const doColor = sat !== 1 || vib !== 0;
+  const K = 1023 / 255;
+  for (let i = 0, j = 0, k = 0; i < n; i++, j += stride, k += 4) {
+    let r = inp[j], g = inp[j+1], b = inp[j+2];
+    r = l1[r <= 0 ? 0 : r >= 255 ? 1023 : (r * K) | 0];
+    g = l1[g <= 0 ? 0 : g >= 255 ? 1023 : (g * K) | 0];
+    b = l1[b <= 0 ? 0 : b >= 255 ? 1023 : (b * K) | 0];
+    if (hasD) {
+      const L = .2126*r + .7152*g + .0722*b;
+      const d = l2[L <= 0 ? 0 : L >= 1 ? 1023 : (L * 1023) | 0];
+      if (d !== 0) {
+        const tt = L * 8 > 1 ? 1 : L * 8;
+        const f = L > 1e-4 ? Math.min(4, Math.max(0, (L + d) / L)) : 1;
+        r = (r + d) * (1 - tt) + r * f * tt; g = (g + d) * (1 - tt) + g * f * tt; b = (b + d) * (1 - tt) + b * f * tt;
+      }
+    }
+    if (doColor) {
+      const L = .2126*r + .7152*g + .0722*b;
+      let s = sat;
+      if (vib !== 0) {
+        const mx = r > g ? (r > b ? r : b) : (g > b ? g : b), mn = r < g ? (r < b ? r : b) : (g < b ? g : b);
+        const cs = mx > 1e-4 ? (mx - mn) / mx : 0;
+        s *= 1 + vib * (1 - cs) * (vib > 0 ? 1.2 : 1);
+      }
+      r = L + (r - L) * s; g = L + (g - L) * s; b = L + (b - L) * s;
+    }
+    r *= wr; g *= wg; b *= wb;
+    if (F) {
+      let fr, fg, fb;
+      if (F.mono) {
+        let y = .299*r + .587*g + .114*b;
+        y = fl[y <= 0 ? 0 : y >= 1 ? 1023 : (y * 1023) | 0];
+        fr = y * F.tone[0]; fg = y * F.tone[1]; fb = y * F.tone[2];
+      } else {
+        fr = fl[r <= 0 ? 0 : r >= 1 ? 1023 : (r * 1023) | 0];
+        fg = fl[g <= 0 ? 0 : g >= 1 ? 1023 : (g * 1023) | 0];
+        fb = fl[b <= 0 ? 0 : b >= 1 ? 1023 : (b * 1023) | 0];
+        if (F.sat !== 1) { const y = .2126*fr + .7152*fg + .0722*fb; fr = y + (fr - y) * F.sat; fg = y + (fg - y) * F.sat; fb = y + (fb - y) * F.sat; }
+        fr *= F.tone[0]; fg *= F.tone[1]; fb *= F.tone[2];
+      }
+      r += (fr - r) * fi; g += (fg - g) * fi; b += (fb - b) * fi;
+    }
+    if (CL) {
+      r = CL[0][r <= 0 ? 0 : r >= 1 ? 1023 : (r * 1023) | 0];
+      g = CL[1][g <= 0 ? 0 : g >= 1 ? 1023 : (g * 1023) | 0];
+      b = CL[2][b <= 0 ? 0 : b >= 1 ? 1023 : (b * 1023) | 0];
+    }
+    out[k] = r * 255; out[k+1] = g * 255; out[k+2] = b * 255; out[k+3] = alpha[k+3];
+  }
+}
+
+function process() {
+  const p = params(S), w = img.prev.width, h = img.prev.height;
+  const key = p.sharpness + '|' + p.definition + '|' + p.noise;
+  if (key !== spCache.key) {
+    spCache.data = (p.sharpness || p.definition || p.noise) ? spatial(img.prevData.data, w, h, p) : null;
+    spCache.key = key;
+  }
+  const inp = spCache.data || img.prevData.data;
+  colorPass(inp, spCache.data ? 3 : 4, procD.data, w * h, p, img.prevData.data);
+  corrPass(procD.data, w * h, S.cor);
+  fxPass(procD.data, w, h, S.fx);
+  procX.putImageData(procD, 0, 0);
+  procVer++;
+  drawHisto(procD.data);
+}
+
+function invalidate(thumbs) { dirty = true; schedule(); if (thumbs) scheduleThumbs(); updateDocInfo(); }
+function schedule() { if (!raf) raf = requestAnimationFrame(frame); }
+function frame() { raf = 0; if (img && dirty) { process(); dirty = false; if (mode === 'curves') drawCurve(); } draw(); }
+
+/* ---------- histogram ---------- */
+const histo = $('#histo'), hctx = histo.getContext('2d');
+function drawHisto(d) {
+  if (!histo.offsetParent) return;
+  const r = histo.getBoundingClientRect(), dpr = devicePixelRatio || 1;
+  if (histo.width !== Math.round(r.width * dpr)) { histo.width = Math.round(r.width * dpr); histo.height = Math.round(r.height * dpr); }
+  const B = 128, R = new Uint32Array(B), G = new Uint32Array(B), Bl = new Uint32Array(B);
+  let clipHi = 0, clipLo = 0, cnt = 0;
+  for (let k = 0; k < d.length; k += 28) {
+    R[d[k] >> 1]++; G[d[k+1] >> 1]++; Bl[d[k+2] >> 1]++; cnt++;
+    const L = (d[k] + d[k+1] + d[k+2]) / 3; if (L > 252) clipHi++; else if (L < 3) clipLo++;
+  }
+  let mx = 1;
+  for (let i = 2; i < B - 2; i++) mx = Math.max(mx, R[i], G[i], Bl[i]);
+  const W = histo.width, H = histo.height;
+  hctx.clearRect(0, 0, W, H);
+  hctx.globalCompositeOperation = 'lighter';
+  [[R,'rgba(255,69,58,.75)'],[G,'rgba(48,209,88,.7)'],[Bl,'rgba(10,132,255,.8)']].forEach(([a, col]) => {
+    hctx.beginPath(); hctx.moveTo(0, H);
+    for (let i = 0; i < B; i++) hctx.lineTo(i / (B - 1) * W, H - Math.min(1, a[i] / mx) * (H - 6));
+    hctx.lineTo(W, H); hctx.closePath(); hctx.fillStyle = col; hctx.fill();
+  });
+  hctx.globalCompositeOperation = 'source-over';
+  $('#histInfo').textContent = `тени ${(clipLo / cnt * 100).toFixed(1)}% · света ${(clipHi / cnt * 100).toFixed(1)}%`;
+}
+
+/* ---------- geometry ---------- */
+const view = $('#view'), vctx = view.getContext('2d');
+let vw = 0, vh = 0;
+const norm = r => ((r % 4) + 4) % 4;
+function oriented(w, h) { return norm(S.geom.rot) % 2 ? [h, w] : [w, h]; }
+function fillScale(a, cw, ch) { a = Math.abs(a); return Math.cos(a) + Math.sin(a) * Math.max(cw / ch, ch / cw); }
+function drawOriented(ctx, im, OW, OH) {
+  ctx.save(); ctx.translate(OW / 2, OH / 2);
+  if (S.geom.flip) ctx.scale(-1, 1);
+  ctx.rotate(norm(S.geom.rot) * Math.PI / 2);
+  ctx.drawImage(im, -im.width / 2, -im.height / 2);
+  ctx.restore();
+}
+function drawGeomOutput(ctx, im, outW, outH) {
+  const [OW, OH] = oriented(im.width, im.height), c = S.geom.crop;
+  const cw = c.w * OW, ch = c.h * OH, cx = (c.x + c.w / 2) * OW, cy = (c.y + c.h / 2) * OH;
+  const a = S.geom.angle * Math.PI / 180, k = fillScale(a, cw, ch);
+  ctx.save();
+  ctx.imageSmoothingQuality = 'high';
+  ctx.scale(outW / cw, outH / ch);
+  ctx.translate(cw / 2, ch / 2); ctx.rotate(a); ctx.scale(k, k); ctx.translate(-cx, -cy);
+  drawOriented(ctx, im, OW, OH);
+  ctx.restore();
+}
+function vignette(ctx, w, h, v) {
+  if (!v) return;
+  const cx = w / 2, cy = h / 2, R = Math.hypot(w, h) / 2;
+  const g = ctx.createRadialGradient(cx, cy, R * .3, cx, cy, R);
+  const col = v > 0 ? '0,0,0' : '255,255,255', a = Math.abs(v) * .85;
+  g.addColorStop(0, `rgba(${col},0)`); g.addColorStop(.55, `rgba(${col},${a * .35})`); g.addColorStop(1, `rgba(${col},${a})`);
+  ctx.fillStyle = g; ctx.fillRect(0, 0, w, h);
+}
+function drawStroke(ctx, s, W, H) {
+  const pts = s.pts; if (!pts.length) return;
+  if (RT.has(s.tool)) return;
+  if (s.tool === 'text' || SHAPES.has(s.tool)) return drawShape(ctx, s, W, H);
+  ctx.save();
+  ctx.lineCap = 'round'; ctx.lineJoin = 'round'; ctx.strokeStyle = s.color; ctx.fillStyle = s.color;
+  let lw = s.size * W;
+  if (s.tool === 'marker') { ctx.globalAlpha = .4; lw *= 2.6; ctx.lineCap = 'butt'; }
+  if (s.tool === 'pencil') { ctx.globalAlpha = .85; lw *= .5; }
+  ctx.lineWidth = lw;
+  const path = (ox, oy) => {
+    ctx.beginPath();
+    if (pts.length === 1) { ctx.arc(pts[0][0] * W + ox, pts[0][1] * H + oy, lw / 2, 0, 7); ctx.fill(); return; }
+    ctx.moveTo(pts[0][0] * W + ox, pts[0][1] * H + oy);
+    for (let i = 1; i < pts.length - 1; i++) {
+      const mx = (pts[i][0] + pts[i+1][0]) / 2 * W, my = (pts[i][1] + pts[i+1][1]) / 2 * H;
+      ctx.quadraticCurveTo(pts[i][0] * W + ox, pts[i][1] * H + oy, mx + ox, my + oy);
+    }
+    const l = pts[pts.length - 1]; ctx.lineTo(l[0] * W + ox, l[1] * H + oy); ctx.stroke();
+  };
+  path(0, 0);
+  if (s.tool === 'pencil') { ctx.globalAlpha = .3; ctx.lineWidth = lw * .6; path(lw * .35, -lw * .25); }
+  ctx.restore();
+}
+function drawAllStrokes(ctx, W, H) {
+  S.strokes.forEach(s => drawStroke(ctx, s, W, H));
+  if (curStroke) drawStroke(ctx, curStroke, W, H);
+}
+
+function fitRect() {
+  const [OW, OH] = oriented(img.prev.width, img.prev.height), c = S.geom.crop;
+  const cw = c.w * OW, ch = c.h * OH, m = vw < 600 ? 12 : 28;
+  // never let the fit go to zero or below (minimized window, hidden canvas)
+  const f = Math.max(1e-3, Math.min((vw - 2 * m) / cw, (vh - 2 * m) / ch));
+  const w = Math.max(1, cw * f), h = Math.max(1, ch * f);
+  return {x: (vw - w) / 2, y: (vh - h) / 2, w, h};
+}
+/* zoom + hand tool (Photoshop) */
+let vz = 1, panX = 0, panY = 0, spaceHand = false;
+function outRect() {
+  const b = fitRect();
+  if (mode === 'crop' || vz === 1) return b;
+  const w = b.w * vz, h = b.h * vz;
+  return {x: (vw - w) / 2 + panX, y: (vh - h) / 2 + panY, w, h};
+}
+function clampPan() {
+  const b = fitRect(), w = b.w * vz, h = b.h * vz;
+  const mx = Math.max(0, (w - vw) / 2 + 60), my = Math.max(0, (h - vh) / 2 + 60);
+  panX = clamp(panX, -mx, mx); panY = clamp(panY, -my, my);
+}
+function zoomAt(nz, cx, cy) {
+  if (!img || mode === 'crop') return;
+  if (cx === undefined) { cx = vw / 2; cy = vh / 2; }
+  const r0 = outRect(), u = (cx - r0.x) / r0.w, v = (cy - r0.y) / r0.h;
+  vz = clamp(nz, 1, 40);
+  if (vz < 1.001) { vz = 1; panX = panY = 0; }
+  else {
+    const b = fitRect(), w = b.w * vz, h = b.h * vz;
+    panX = cx - u * w - (vw - w) / 2; panY = cy - v * h - (vh - h) / 2;
+    clampPan();
+  }
+  updateZoomUI(); schedule();
+}
+function oneToOne() {
+  if (!img) return 1;
+  const [OW] = oriented(img.full.width, img.full.height);
+  return (S.geom.crop.w * OW / (devicePixelRatio || 1)) / fitRect().w;
+}
+function updateZoomUI() {
+  if (!img) return;
+  const pct = Math.round(vz / oneToOne() * 100);
+  $('#zPct').textContent = vz === 1 ? 'Вписать' : pct + '%';
+  $('#stageHint').hidden = vz > 1;
+  $('#stage').classList.toggle('grab', vz > 1 && mode !== 'crop' && mode !== 'markup' || spaceHand);
+}
+$('#zIn').onclick = () => zoomAt(vz * 1.5);
+$('#zOut').onclick = () => zoomAt(vz / 1.5);
+$('#zPct').onclick = () => zoomAt(1);
+$('#z100').onclick = () => zoomAt(oneToOne());
+function cropLayout() {
+  const [OW, OH] = oriented(img.prev.width, img.prev.height), m = vw < 600 ? 26 : 48;
+  const f = Math.max(1e-3, Math.min((vw - 2 * m) / OW, (vh - 2 * m) / OH));
+  return {OW, OH, f, ox: (vw - OW * f) / 2, oy: (vh - OH * f) / 2};
+}
+function cropBox() {
+  const L = cropLayout(), c = S.geom.crop;
+  return {L, x: L.ox + c.x * L.OW * L.f, y: L.oy + c.y * L.OH * L.f, w: c.w * L.OW * L.f, h: c.h * L.OH * L.f};
+}
+
+function draw() {
+  const dpr = devicePixelRatio || 1, ctx = vctx;
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.fillStyle = '#000'; ctx.fillRect(0, 0, vw, vh);
+  if (!img || vw < 40 || vh < 40) return;
+  const src = comparing ? img.prev : procC;
+  if (mode === 'crop') return drawCrop(ctx, src);
+  const r = outRect();
+  ctx.save(); ctx.translate(r.x, r.y);
+  ctx.beginPath(); ctx.rect(0, 0, r.w, r.h); ctx.clip();
+  if (comparing) drawGeomOutput(ctx, src, r.w, r.h);
+  else {
+    ctx.imageSmoothingQuality = 'high';
+    if (Lumen.transparent) drawChecker(ctx, r.w, r.h);
+    ctx.drawImage(getOut(), 0, 0, r.w, r.h);
+    vignette(ctx, r.w, r.h, params(S).vignette);
+    drawAllStrokes(ctx, r.w, r.h);
+    HOOKS.overlay.forEach(f => f(ctx, r.w, r.h, true));
+  }
+  if (showGrid) {
+    ctx.strokeStyle = 'rgba(255,255,255,.28)'; ctx.lineWidth = 1; ctx.beginPath();
+    for (let i = 1; i < 8; i++) {
+      const gx = Math.round(r.w * i / 8) + .5, gy = Math.round(r.h * i / 8) + .5;
+      ctx.moveTo(gx, 0); ctx.lineTo(gx, r.h); ctx.moveTo(0, gy); ctx.lineTo(r.w, gy);
+    }
+    ctx.stroke();
+  }
+  ctx.restore();
+  drawBrushCursor(ctx, r);
+  if (!comparing) HOOKS.afterDraw.forEach(f => f(ctx, r));
+}
+function drawChecker(ctx, w, h) {
+  const s = 10;
+  ctx.fillStyle = '#e9e9ee'; ctx.fillRect(0, 0, w, h);
+  ctx.fillStyle = '#c9c9d0';
+  for (let y = 0; y < h; y += s) for (let x = (y / s) % 2 ? s : 0; x < w; x += s * 2) ctx.fillRect(x, y, s, s);
+}
+function drawCrop(ctx, src) {
+  const b = cropBox(), L = b.L, c = S.geom.crop;
+  const cx = (c.x + c.w / 2) * L.OW, cy = (c.y + c.h / 2) * L.OH;
+  const a = S.geom.angle * Math.PI / 180, k = fillScale(a, c.w * L.OW, c.h * L.OH);
+  ctx.save();
+  ctx.translate(L.ox, L.oy); ctx.scale(L.f, L.f);
+  ctx.translate(cx, cy); ctx.rotate(a); ctx.scale(k, k); ctx.translate(-cx, -cy);
+  drawOriented(ctx, src, L.OW, L.OH);
+  ctx.restore();
+  ctx.save();
+  ctx.fillStyle = 'rgba(0,0,0,.62)';
+  ctx.beginPath(); ctx.rect(0, 0, vw, vh); ctx.rect(b.x, b.y, b.w, b.h); ctx.fill('evenodd');
+  const fine = cropDrag || angDragging;
+  ctx.strokeStyle = 'rgba(255,255,255,.45)'; ctx.lineWidth = 1;
+  ctx.beginPath();
+  const n = angDragging ? 9 : 3;
+  if (fine || true) for (let i = 1; i < n; i++) {
+    const gx = Math.round(b.x + b.w * i / n) + .5, gy = Math.round(b.y + b.h * i / n) + .5;
+    ctx.moveTo(gx, b.y); ctx.lineTo(gx, b.y + b.h); ctx.moveTo(b.x, gy); ctx.lineTo(b.x + b.w, gy);
+  }
+  ctx.globalAlpha = fine ? 1 : .55; ctx.stroke(); ctx.globalAlpha = 1;
+  ctx.strokeStyle = '#fff'; ctx.lineWidth = 1; ctx.strokeRect(Math.round(b.x) + .5, Math.round(b.y) + .5, Math.round(b.w) - 1, Math.round(b.h) - 1);
+  ctx.lineWidth = 3.5; ctx.lineCap = 'square';
+  const t = Math.min(22, b.w / 3, b.h / 3), o = 1.5;
+  ctx.beginPath();
+  ctx.moveTo(b.x - o, b.y + t); ctx.lineTo(b.x - o, b.y - o); ctx.lineTo(b.x + t, b.y - o);
+  ctx.moveTo(b.x + b.w - t, b.y - o); ctx.lineTo(b.x + b.w + o, b.y - o); ctx.lineTo(b.x + b.w + o, b.y + t);
+  ctx.moveTo(b.x + b.w + o, b.y + b.h - t); ctx.lineTo(b.x + b.w + o, b.y + b.h + o); ctx.lineTo(b.x + b.w - t, b.y + b.h + o);
+  ctx.moveTo(b.x + t, b.y + b.h + o); ctx.lineTo(b.x - o, b.y + b.h + o); ctx.lineTo(b.x - o, b.y + b.h - t);
+  ctx.stroke();
+  ctx.restore();
+}
+
+new ResizeObserver(() => {
+  const r = view.getBoundingClientRect(), dpr = devicePixelRatio || 1;
+  vw = r.width; vh = r.height;
+  view.width = Math.max(1, Math.round(vw * dpr)); view.height = Math.max(1, Math.round(vh * dpr));
+  schedule();
+}).observe(view);
+
+/* ---------- ruler (iOS dial) ---------- */
+class Ruler {
+  constructor(cv, o) {
+    Object.assign(this, {min:-100, max:100, value:0, def:0, ppu:3, tick:5, major:25, step:1}, o);
+    this.cv = cv; this.ctx = cv.getContext('2d'); cv.tabIndex = 0;
+    new ResizeObserver(() => this.resize()).observe(cv);
+    cv.addEventListener('pointerdown', e => { cv.setPointerCapture(e.pointerId); this.drag = {x: e.clientX, v: this.value, start: this.value}; this.onStart && this.onStart(); });
+    cv.addEventListener('pointermove', e => {
+      if (!this.drag) return;
+      let v = this.drag.v - (e.clientX - this.drag.x) / this.ppu;
+      v = clamp(Math.round(v / this.step) * this.step, this.min, this.max);
+      if (v !== this.value) { this.value = v; this.draw(); this.onInput && this.onInput(v); }
+    });
+    const end = () => { if (!this.drag) return; const s = this.drag.start; this.drag = null; this.onEnd && this.onEnd(); if (this.value !== s) this.onCommit && this.onCommit(this.value, s); };
+    cv.addEventListener('pointerup', end); cv.addEventListener('pointercancel', end);
+    cv.addEventListener('dblclick', () => this.set(this.def, true));
+    cv.addEventListener('wheel', e => {
+      e.preventDefault();
+      const d = Math.abs(e.deltaX) > Math.abs(e.deltaY) ? e.deltaX : -e.deltaY;
+      this.nudge(Math.sign(d) * this.step * (e.shiftKey ? 5 : 1));
+    }, {passive: false});
+    cv.addEventListener('keydown', e => {
+      const m = e.shiftKey ? 10 : 1;
+      if (e.key === 'ArrowRight' || e.key === 'ArrowUp') { e.preventDefault(); this.nudge(this.step * m); }
+      if (e.key === 'ArrowLeft' || e.key === 'ArrowDown') { e.preventDefault(); this.nudge(-this.step * m); }
+      if (e.key === 'Home' || e.key === '0') { this.set(this.def, true); }
+    });
+  }
+  nudge(d) {
+    if (this._ws === undefined) this._ws = this.value;
+    const v = clamp(this.value + d, this.min, this.max);
+    if (v !== this.value) { this.value = v; this.draw(); this.onInput && this.onInput(v); }
+    clearTimeout(this._wt);
+    this._wt = setTimeout(() => { const s = this._ws; this._ws = undefined; if (this.value !== s) this.onCommit && this.onCommit(this.value, s); }, 450);
+  }
+  set(v, commit) { v = clamp(v, this.min, this.max); const s = this.value; if (v === s) return; this.value = v; this.draw(); this.onInput && this.onInput(v); if (commit) this.onCommit && this.onCommit(v, s); }
+  setValue(v) { this.value = v; this.draw(); }
+  setRange(min, max, def) { this.min = min; this.max = max; this.def = def; this.draw(); }
+  resize() {
+    const r = this.cv.getBoundingClientRect(), d = devicePixelRatio || 1;
+    if (!r.width) return;
+    this.cv.width = Math.round(r.width * d); this.cv.height = Math.round(r.height * d);
+    this.w = r.width; this.h = r.height; this.draw();
+  }
+  draw() {
+    this.cv.setAttribute('aria-valuenow', this.value);
+    this.cv.setAttribute('aria-valuemin', this.min); this.cv.setAttribute('aria-valuemax', this.max);
+    if (!this.w) return;
+    const c = this.ctx, d = devicePixelRatio || 1, cx = this.w / 2, mid = this.h / 2 + 5;
+    c.setTransform(d, 0, 0, d, 0, 0); c.clearRect(0, 0, this.w, this.h);
+    const span = Math.ceil(cx / this.ppu) + this.tick;
+    const u0 = Math.floor((this.value - span) / this.tick) * this.tick;
+    for (let u = u0; u <= this.value + span; u += this.tick) {
+      if (u < this.min - 1e-9 || u > this.max + 1e-9) continue;
+      const x = Math.round(cx + (u - this.value) * this.ppu);
+      const maj = Math.abs(u % this.major) < 1e-9, th = maj ? 20 : 12;
+      c.fillStyle = maj ? 'rgba(255,255,255,.85)' : 'rgba(255,255,255,.38)';
+      c.fillRect(x - .5, mid - th / 2, 1, th);
+      if (Math.abs(u - this.def) < 1e-9) { c.beginPath(); c.arc(x, mid - 18, 2.2, 0, 7); c.fillStyle = '#fff'; c.fill(); }
+    }
+    c.fillStyle = '#ffd60a'; c.fillRect(cx - 1, mid - 15, 2, 30);
+  }
+}
+
+/* ---------- UI: adjustments ---------- */
+const C = 2 * Math.PI * 24;
+const chipsEl = $('#chips');
+const chipList = [{id:'auto', name:'Авто'}, ...ADJ];
+chipsEl.innerHTML = chipList.map(a => `
+  <button class="chip${a.id === 'auto' ? ' auto' : ''}" data-id="${a.id}" title="${a.name}">
+    <span class="dial"><svg class="ring" viewBox="0 0 52 52"><circle class="bg" cx="26" cy="26" r="24"/><circle class="val" cx="26" cy="26" r="24" stroke-dasharray="0 ${C}"/></svg><span class="ico"><svg ${SVGA}>${IC[a.id]}</svg></span><span class="num" hidden></span></span>
+    <span class="lbl">${a.name}</span>
+  </button>`).join('');
+const adjRuler = new Ruler($('#adjRuler'), {});
+adjRuler.onInput = v => { S.adj[selAdj] = v; if (S.off[selAdj]) delete S.off[selAdj]; updateChips(); updateAdjHead(); invalidate(false); };
+adjRuler.onCommit = (v) => { push(`${ADJ_BY[selAdj].name} ${fmt(v)}`); scheduleThumbs(); };
+const fmt = v => (v > 0 ? '+' : '') + v;
+
+chipsEl.addEventListener('click', e => {
+  const b = e.target.closest('.chip'); if (!b || !img) return;
+  const id = b.dataset.id;
+  if (id === 'auto') { toggleAuto(); return; }
+  if (selAdj === id) {
+    if (S.adj[id] !== 0) { S.off[id] = !S.off[id]; if (!S.off[id]) delete S.off[id]; push(`${ADJ_BY[id].name}: ${S.off[id] ? 'выкл.' : 'вкл.'}`); invalidate(true); }
+  } else selAdj = id;
+  syncAdj();
+});
+function syncAdj() {
+  const a = ADJ_BY[selAdj];
+  adjRuler.setRange(a.min, 100, 0); adjRuler.setValue(S.adj[selAdj]);
+  $('#adjRuler').classList.toggle('off', !!S.off[selAdj]);
+  updateChips(); updateAdjHead();
+}
+function updateAdjHead() {
+  $('#adjName').textContent = ADJ_BY[selAdj].name;
+  $('#adjVal').textContent = S.off[selAdj] ? 'выкл.' : S.adj[selAdj];
+}
+function updateChips() {
+  chipsEl.querySelectorAll('.chip').forEach(b => {
+    const id = b.dataset.id, ring = b.querySelector('.ring'), val = b.querySelector('.val');
+    const num = b.querySelector('.num'), ico = b.querySelector('.ico');
+    if (id === 'auto') { b.classList.toggle('has', !!S.auto); val.setAttribute('stroke-dasharray', `${S.auto ? C : 0} ${C}`); return; }
+    const v = S.adj[id], sel = id === selAdj;
+    b.classList.toggle('sel', sel); b.classList.toggle('has', v !== 0); b.classList.toggle('dis', !!S.off[id]);
+    ring.classList.toggle('neg', v < 0);
+    val.setAttribute('stroke-dasharray', `${Math.abs(v) / 100 * C} ${C}`);
+    const showNum = sel && v !== 0 && !S.off[id];
+    num.hidden = !showNum; ico.hidden = showNum; num.textContent = v;
+    b.setAttribute('aria-pressed', sel);
+  });
+}
+function computeAuto() {
+  const d = img.prevData.data, H = new Uint32Array(256); let n = 0, sum = 0;
+  for (let k = 0; k < d.length; k += 16) { const L = (.2126*d[k] + .7152*d[k+1] + .0722*d[k+2]) | 0; H[L]++; sum += L; n++; }
+  const mean = sum / n / 255, pct = q => { let a = 0; for (let i = 0; i < 256; i++) { a += H[i]; if (a >= q * n) return i / 255; } return 1; };
+  const lo = pct(.02), hi = pct(.98), spread = hi - lo;
+  return {
+    exposure: Math.round(clamp((.48 - mean) * 120, -50, 50)),
+    brilliance: 22,
+    highlights: hi > .93 ? -Math.round(clamp((hi - .88) * 280, 0, 45)) : 0,
+    shadows: Math.round(clamp((.12 - lo) * 220 + 8, 0, 40)),
+    contrast: Math.round(clamp((.8 - spread) * 50, -10, 25)),
+    blackpoint: lo > .06 ? Math.round(clamp(lo * 120, 0, 20)) : 4,
+    vibrance: 14,
+  };
+}
+function toggleAuto() {
+  if (S.auto) { Object.assign(S.adj, S.auto); S.auto = null; push('Авто: выкл.'); }
+  else { const v = computeAuto(), prior = {}; for (const k in v) { prior[k] = S.adj[k]; S.adj[k] = v[k]; } S.auto = prior; push('Авто'); }
+  syncAdj(); invalidate(true);
+}
+
+/* ---------- UI: filters ---------- */
+const fltEl = $('#filters');
+fltEl.innerHTML = FILTERS.map(f => `<button class="flt" data-id="${f.id}"><canvas width="112" height="112"></canvas><span>${f.name}</span></button>`).join('');
+const fltRuler = new Ruler($('#fltRuler'), {min:0, max:100, def:100, value:100});
+fltRuler.onInput = v => { S.fi = v; $('#fltVal').textContent = v; invalidate(false); };
+fltRuler.onCommit = v => push(`${F_BY[S.filter].name}: ${v}`);
+fltEl.addEventListener('click', e => {
+  const b = e.target.closest('.flt'); if (!b || !img) return;
+  if (S.filter === b.dataset.id) return;
+  S.filter = b.dataset.id; S.fi = 100;
+  push('Фильтр: ' + F_BY[S.filter].name); syncFilters(); invalidate(false);
+});
+function syncFilters() {
+  fltEl.querySelectorAll('.flt').forEach(b => { const on = b.dataset.id === S.filter; b.classList.toggle('sel', on); b.setAttribute('aria-pressed', on); });
+  $('#fltName').textContent = F_BY[S.filter].name;
+  $('#fltVal').textContent = S.filter === 'none' ? '' : S.fi;
+  fltRuler.setValue(S.fi);
+  $('#fltRuler').classList.toggle('off', S.filter === 'none');
+}
+let thumbT = 0;
+function scheduleThumbs() { clearTimeout(thumbT); thumbT = setTimeout(renderThumbs, 220); }
+function renderThumbs() {
+  if (!img) return;
+  const td = img.thumbData, n = td.width * td.height, out = new ImageData(td.width, td.height);
+  const base = params(S);
+  fltEl.querySelectorAll('.flt').forEach(b => {
+    const p = Object.assign({}, base, {F: b.dataset.id === 'none' ? null : F_BY[b.dataset.id], fi: 1});
+    colorPass(td.data, 4, out.data, n, p, td.data);
+    corrPass(out.data, n, S.cor);
+    const cx = b.querySelector('canvas').getContext('2d');
+    cx.putImageData(out, 0, 0);
+    vignette(cx, 112, 112, p.vignette);
+  });
+}
+
+/* ---------- UI: crop ---------- */
+const angRuler = new Ruler($('#angRuler'), {min:-45, max:45, def:0, ppu:7, tick:1, major:5});
+let angDragging = false;
+angRuler.onStart = () => { angDragging = true; schedule(); };
+angRuler.onEnd = () => { angDragging = false; schedule(); };
+angRuler.onInput = v => { S.geom.angle = v; $('#angVal').textContent = v + '°'; schedule(); updateDocInfo(); };
+angRuler.onCommit = v => push(`Выпрямление ${v}°`);
+$('#ratios').innerHTML = RATIOS.map(r => `<button class="pill" data-id="${r.id}">${r.name}</button>`).join('');
+$('#ratios').addEventListener('click', e => { const b = e.target.closest('.pill'); if (b && img) setRatio(b.dataset.id); });
+function ratioVal(id) {
+  if (id === 'orig') { const [OW, OH] = oriented(img.srcW, img.srcH); return OW / OH; }
+  const r = RATIOS.find(x => x.id === id); return r && r.r ? r.r : null;
+}
+function setRatio(id) {
+  S.geom.ratio = id;
+  const R = ratioVal(id);
+  if (R) {
+    const [OW, OH] = oriented(img.prev.width, img.prev.height), k = OW / OH;
+    let wn = 1, hn = k / R; if (hn > 1) { hn = 1; wn = R / k; }
+    const c0 = {...S.geom.crop};
+    S.geom.crop = {x: (1 - wn) / 2, y: (1 - hn) / 2, w: wn, h: hn};
+    remapCrop(c0, S.geom.crop);
+  }
+  push('Формат: ' + RATIOS.find(r => r.id === id).name); syncCrop(); schedule(); updateDocInfo();
+}
+/* Everything drawn on top of the photo (retouch, markup, layers, masks, AI selections) is stored
+   relative to the visible frame. When the frame changes (crop, rotate, flip) it is remapped so
+   it stays on the same spot of the photo. T: pt(u,v) maps a point, sw/sh scale widths/heights,
+   kind is 'rot' | 'flip' | 'crop', canvas(c) reframes a mask bitmap. */
+function remapAll(T) {
+  const o = T.pt(0, 0);
+  S.strokes.forEach(s => {
+    s.pts = s.pts.map(([u, v]) => T.pt(u, v));
+    if (s.size) s.size *= T.sw;
+    if (s.off) { const b = T.pt(s.off[0], s.off[1]); s.off = [b[0] - o[0], b[1] - o[1]]; }
+  });
+  HOOKS.remap.forEach(f => f(T));
+  cloneSrc = null; cloneOff = null;
+}
+const reframeCanvas = (c, draw, w, h) => { const n = mk(Math.max(1, Math.round(w)), Math.max(1, Math.round(h))); const x = n.getContext('2d'); draw(x, n); return n; };
+function cropTransform(c0, c1) {
+  return {kind: 'crop', sw: c0.w / c1.w, sh: c0.h / c1.h,
+    pt: (u, v) => [(c0.x + u * c0.w - c1.x) / c1.w, (c0.y + v * c0.h - c1.y) / c1.h],
+    canvas: c => { const W = c.width * c1.w / c0.w, H = c.height * c1.h / c0.h;
+      return reframeCanvas(c, x => x.drawImage(c, (c0.x - c1.x) / c1.w * W, (c0.y - c1.y) / c1.h * H, c0.w / c1.w * W, c0.h / c1.h * H), W, H); }};
+}
+const remapCrop = (c0, c1) => { if (JSON.stringify(c0) !== JSON.stringify(c1)) remapAll(cropTransform(c0, c1)); };
+function rotLeft() {
+  const g = S.geom, c = g.crop;
+  const [OW, OH] = oriented(img.prev.width, img.prev.height), k = (c.w * OW) / (c.h * OH);
+  g.crop = {x: c.y, y: 1 - c.x - c.w, w: c.h, h: c.w};
+  g.rot = norm(g.rot + (g.flip ? 1 : 3));
+  remapAll({kind: 'rot', sw: k, sh: 1 / k, pt: (u, v) => [v, 1 - u],
+    canvas: c0 => reframeCanvas(c0, x => { x.translate(0, c0.width); x.rotate(-Math.PI / 2); x.drawImage(c0, 0, 0); }, c0.height, c0.width)});
+  const m = /^(\d+):(\d+)$/.exec(g.ratio);
+  if (m && m[1] !== m[2]) { const sw = m[2] + ':' + m[1]; if (RATIOS.some(r => r.id === sw)) g.ratio = sw; }
+}
+function flipH() {
+  const g = S.geom; g.flip = !g.flip; g.crop.x = 1 - g.crop.x - g.crop.w; g.angle = -g.angle;
+  remapAll({kind: 'flip', sw: 1, sh: 1, pt: (u, v) => [1 - u, v],
+    canvas: c0 => reframeCanvas(c0, x => { x.translate(c0.width, 0); x.scale(-1, 1); x.drawImage(c0, 0, 0); }, c0.width, c0.height)});
+}
+const geomDone = label => { push(label); syncCrop(); schedule(); updateDocInfo(); };
+$('#btnRotate').onclick = () => { if (img) { rotLeft(); geomDone('Поворот 90° влево'); } };
+$('#btnRotateR').onclick = () => { if (img) { rotLeft(); rotLeft(); rotLeft(); geomDone('Поворот 90° вправо'); } };
+$('#btnFlip').onclick = () => { if (img) { flipH(); geomDone('Отражение по горизонтали'); } };
+$('#btnFlipV').onclick = () => { if (img) { flipH(); rotLeft(); rotLeft(); geomDone('Отражение по вертикали'); } };
+$('#btnCropReset').onclick = () => {
+  if (!img) return;
+  // undo flips and rotations step by step so everything on top follows, then the crop
+  const g = S.geom;
+  if (g.flip) flipH();
+  let guard = 0; while (norm(g.rot) !== 0 && guard++ < 4) rotLeft();
+  g.angle = 0; g.ratio = 'free';
+  const c0 = {...g.crop}; g.crop = {x: 0, y: 0, w: 1, h: 1}; remapCrop(c0, g.crop);
+  push('Сброс обрезки'); syncCrop(); schedule(); updateDocInfo();
+};
+function syncCrop() {
+  angRuler.setValue(S.geom.angle); $('#angVal').textContent = S.geom.angle + '°';
+  $('#ratios').querySelectorAll('.pill').forEach(b => b.setAttribute('aria-pressed', b.dataset.id === S.geom.ratio));
+}
+function hitCrop(p) {
+  const b = cropBox(), T = 22;
+  const inX = p.x > b.x - T && p.x < b.x + b.w + T, inY = p.y > b.y - T && p.y < b.y + b.h + T;
+  let h = '';
+  if (Math.abs(p.y - b.y) < T && inX) h += 'n'; else if (Math.abs(p.y - (b.y + b.h)) < T && inX) h += 's';
+  if (Math.abs(p.x - b.x) < T && inY) h += 'w'; else if (Math.abs(p.x - (b.x + b.w)) < T && inY) h += 'e';
+  if (h && b.w > 3 * T && b.h > 3 * T) return h;
+  if (p.x > b.x && p.x < b.x + b.w && p.y > b.y && p.y < b.y + b.h) return 'move';
+  return h || null;
+}
+const CURSORS = {n:'ns-resize', s:'ns-resize', e:'ew-resize', w:'ew-resize', nw:'nwse-resize', se:'nwse-resize', ne:'nesw-resize', sw:'nesw-resize', move:'move'};
+function dragCrop(p) {
+  const d = cropDrag, L = cropBox().L, c0 = d.c0, MIN = .06;
+  const dxn = (p.x - d.x) / (L.OW * L.f), dyn = (p.y - d.y) / (L.OH * L.f);
+  if (d.h === 'move') { S.geom.crop = {x: clamp(c0.x + dxn, 0, 1 - c0.w), y: clamp(c0.y + dyn, 0, 1 - c0.h), w: c0.w, h: c0.h}; return; }
+  const h = d.h;
+  let l = c0.x, r = c0.x + c0.w, t = c0.y, b = c0.y + c0.h;
+  if (h.includes('w')) l = clamp(l + dxn, 0, r - MIN);
+  if (h.includes('e')) r = clamp(r + dxn, l + MIN, 1);
+  if (h.includes('n')) t = clamp(t + dyn, 0, b - MIN);
+  if (h.includes('s')) b = clamp(b + dyn, t + MIN, 1);
+  const R = ratioVal(S.geom.ratio);
+  if (R) {
+    const k = L.OW / L.OH;
+    let wn = r - l, hn = b - t;
+    if (h === 'n' || h === 's') wn = hn * R / k; else hn = wn * k / R;
+    const ax = h.includes('w') ? 'r' : h.includes('e') ? 'l' : 'c';
+    const ay = h.includes('n') ? 'b' : h.includes('s') ? 't' : 'c';
+    const cxm = (c0.x + c0.w / 2), cym = (c0.y + c0.h / 2);
+    const maxW = ax === 'l' ? 1 - l : ax === 'r' ? r : 2 * Math.min(cxm, 1 - cxm);
+    const maxH = ay === 't' ? 1 - t : ay === 'b' ? b : 2 * Math.min(cym, 1 - cym);
+    const s = Math.min(1, maxW / wn, maxH / hn); wn *= s; hn *= s;
+    l = ax === 'l' ? l : ax === 'r' ? r - wn : cxm - wn / 2; r = l + wn;
+    t = ay === 't' ? t : ay === 'b' ? b - hn : cym - hn / 2; b = t + hn;
+  }
+  S.geom.crop = {x: l, y: t, w: r - l, h: b - t};
+}
+
+/* ---------- UI: markup ---------- */
+const MTOOLS = [
+  {id:'pen', name:'Перо', ic:'<path d="M15.5 4.5 19.5 8.5 9 19H5v-4z"/>'},
+  {id:'marker', name:'Маркер', ic:'<path d="M14 4.5 19.5 10 11 18.5H5.5V13z"/><path d="M4 21h9"/>'},
+  {id:'pencil', name:'Карандаш', ic:'<path d="M16 3.5 20.5 8 8.5 20 3.5 20.5 4 15.5z"/><path d="m13.5 6 4.5 4.5"/>'},
+  {id:'eraser', name:'Ластик', ic:'<path d="M9 20h11"/><path d="M4.5 15.5 14 6l5 5-7.5 7.5a2 2 0 0 1-2.8 0l-4.2-4.2a1.5 1.5 0 0 1 0-1.8z"/>'},
+  {id:'text', name:'Текст', ic:'<path d="M5 6V4.5h14V6M12 4.5v15M9 19.5h6"/>'},
+  {id:'rect', name:'Прямоугольник', ic:'<rect x="4" y="6" width="16" height="12" rx="1"/>'},
+  {id:'ellipse', name:'Эллипс', ic:'<ellipse cx="12" cy="12" rx="8.5" ry="6.5"/>'},
+  {id:'line', name:'Линия', ic:'<path d="M5 19 19 5"/>'},
+  {id:'arrow', name:'Стрелка', ic:'<path d="M5 19 19 5M10 5h9v9"/>'},
+  {id:'picker', name:'Пипетка', ic:'<path d="m14.5 4.5 5 5"/><path d="M13 6l5 5-9 9H4v-5z"/>'},
+];
+const COLORS = ['#000000', '#ffffff', '#0a84ff', '#30d158', '#ffd60a', '#ff453a'];
+$('#mtools').innerHTML = MTOOLS.map(t => `<button class="tool" data-id="${t.id}"><svg ${SVGA}>${t.ic}</svg>${t.name}</button>`).join('');
+$('#swatches').innerHTML = COLORS.map(c => `<button class="sw" data-c="${c}" style="background:${c}" aria-label="Цвет ${c}"></button>`).join('') +
+  `<label class="sw custom" title="Свой цвет"><input type="color" id="customColor" value="#bf5af2" aria-label="Свой цвет"></label>`;
+$('#mtools').addEventListener('click', e => { const b = e.target.closest('.tool'); if (b) { markTool = b.dataset.id; syncMarkup(); } });
+$('#swatches').addEventListener('click', e => { const b = e.target.closest('.sw[data-c]'); if (b) { markColor = b.dataset.c; if (markTool === 'eraser') markTool = 'pen'; syncMarkup(); } });
+$('#customColor').addEventListener('input', e => { markColor = e.target.value; if (markTool === 'eraser') markTool = 'pen'; syncMarkup(); });
+$('#markSize').addEventListener('input', e => { markSize = +e.target.value; $('#sizeVal').textContent = markSize; });
+$('#btnClearMarks').onclick = () => { const k = S.strokes.filter(s => RT.has(s.tool)); if (k.length !== S.strokes.length) { S.strokes = k; push('Очистка разметки'); schedule(); } };
+function syncMarkup() {
+  $('#mtools').querySelectorAll('.tool').forEach(b => b.setAttribute('aria-pressed', b.dataset.id === markTool));
+  $('#swatches').querySelectorAll('.sw[data-c]').forEach(b => b.setAttribute('aria-pressed', b.dataset.c === markColor && markTool !== 'eraser'));
+}
+
+/* ---------- canvas pointer ---------- */
+const pt = e => { const r = view.getBoundingClientRect(); return {x: e.clientX - r.left, y: e.clientY - r.top}; };
+function setCompare(on) { comparing = on; $('#badge').hidden = !on; schedule(); }
+function eraseAt(p) {
+  const r = outRect(), R = Math.max(10, markSize);
+  const before = S.strokes.length;
+  S.strokes = S.strokes.filter(s => RT.has(s.tool) || !s.pts.some(([u, v]) => Math.hypot(r.x + u * r.w - p.x, r.y + v * r.h - p.y) < R + s.size * r.w / 2));
+  if (S.strokes.length !== before) { erasing = true; schedule(); }
+}
+const ptrs = new Map();
+let pinch = null, panDrag = null;
+function startPinch() {
+  const [a, b] = [...ptrs.values()];
+  pinch = {d: Math.hypot(a.x - b.x, a.y - b.y) || 1, z: vz};
+  curStroke = null; cropDrag = null; panDrag = null;
+  if (comparing) setCompare(false);
+}
+view.addEventListener('pointerdown', e => {
+  if (!img) return;
+  const p = pt(e);
+  view.setPointerCapture(e.pointerId);
+  ptrs.set(e.pointerId, p);
+  if (ptrs.size === 2 && mode !== 'crop') { startPinch(); schedule(); return; }
+  if (ptrs.size > 1) return;
+  const wantsPan = mode !== 'crop' && (spaceHand || e.button === 1 || (vz > 1 && mode !== 'markup' && mode !== 'retouch' && !HOOKS.pointer[mode]));
+  if (wantsPan) { panDrag = {x: p.x, y: p.y, px: panX, py: panY}; $('#stage').classList.add('grabbing'); return; }
+  if (HOOKS.pointer[mode]) { HOOKS.pointer[mode].down(p, e); return; }
+  if (mode === 'crop') { const h = hitCrop(p); if (h) { cropDrag = {h, x: p.x, y: p.y, c0: {...S.geom.crop}}; schedule(); } return; }
+  if (mode === 'retouch') { retouchDown(p, e); return; }
+  if (mode === 'markup') {
+    if (markTool === 'eraser') { erasing = false; eraseAt(p); view._erase = true; return; }
+    const r = outRect(), uv = [(p.x - r.x) / r.w, (p.y - r.y) / r.h];
+    if (markTool === 'picker') { pickColor(p); return; }
+    if (markTool === 'text') {
+      const t = $('#markText').value.trim();
+      if (!t) { toast('Впишите текст надписи в панели справа'); return; }
+      S.strokes.push({tool: 'text', text: t, color: markColor, size: markSize * 3 / r.w, pts: [uv]});
+      push('Текст: ' + t.slice(0, 18)); schedule(); return;
+    }
+    if (SHAPES.has(markTool)) { curStroke = {tool: markTool, color: markColor, size: markSize / r.w, fill: $('#markFill').checked, pts: [uv, uv.slice()]}; schedule(); return; }
+    curStroke = {tool: markTool, color: markColor, size: markSize / r.w, pts: [uv]};
+    schedule(); return;
+  }
+  setCompare(true);
+});
+view.addEventListener('pointermove', e => {
+  if (!img) return;
+  const p = pt(e);
+  if (ptrs.has(e.pointerId)) ptrs.set(e.pointerId, p);
+  if (pinch && ptrs.size >= 2) {
+    const [a, b] = [...ptrs.values()];
+    const d = Math.hypot(a.x - b.x, a.y - b.y);
+    zoomAt(pinch.z * d / pinch.d, (a.x + b.x) / 2, (a.y + b.y) / 2);
+    return;
+  }
+  if (panDrag) { panX = panDrag.px + p.x - panDrag.x; panY = panDrag.py + p.y - panDrag.y; clampPan(); schedule(); return; }
+  if (mode === 'crop') {
+    if (cropDrag) { dragCrop(p); schedule(); updateDocInfo(); }
+    else { const h = hitCrop(p); view.style.cursor = h ? CURSORS[h] : 'default'; }
+    return;
+  }
+  if (!ptrs.size) showPixel(p);
+  if (HOOKS.pointer[mode]) { hoverP = p; HOOKS.pointer[mode].move(p, e, ptrs.size > 0); return; }
+  if (mode === 'markup' || mode === 'retouch') {
+    view.style.cursor = 'crosshair';
+    hoverP = p;
+    if (view._erase) { eraseAt(p); return; }
+    if (curStroke) {
+      const r = outRect(), uv = [(p.x - r.x) / r.w, (p.y - r.y) / r.h];
+      if (SHAPES.has(curStroke.tool)) {
+        if (e.shiftKey && curStroke.tool !== 'line' && curStroke.tool !== 'arrow') {
+          const a = curStroke.pts[0], dx = (uv[0] - a[0]) * r.w, dy = (uv[1] - a[1]) * r.h, m = Math.max(Math.abs(dx), Math.abs(dy));
+          uv[0] = a[0] + Math.sign(dx || 1) * m / r.w; uv[1] = a[1] + Math.sign(dy || 1) * m / r.h;
+        }
+        curStroke.pts[1] = uv;
+      } else curStroke.pts.push(uv);
+    }
+    schedule();
+    return;
+  }
+  view.style.cursor = '';
+});
+view.addEventListener('pointerleave', () => { hoverP = null; updateDocInfo(); schedule(); });
+const pend = e => {
+  ptrs.delete(e.pointerId);
+  if (pinch) { if (ptrs.size < 2) pinch = null; return; }
+  if (panDrag) { panDrag = null; $('#stage').classList.remove('grabbing'); return; }
+  if (HOOKS.pointer[mode] && HOOKS.pointer[mode].up) { HOOKS.pointer[mode].up(e); return; }
+  if (cropDrag) { const c0 = cropDrag.c0, moved = JSON.stringify(c0) !== JSON.stringify(S.geom.crop); cropDrag = null; if (moved) { remapCrop(c0, S.geom.crop); push('Обрезка'); } schedule(); }
+  if (curStroke) {
+    const s = curStroke; curStroke = null;
+    const tiny = SHAPES.has(s.tool) && Math.hypot(s.pts[1][0] - s.pts[0][0], s.pts[1][1] - s.pts[0][1]) < .004;
+    if (!tiny) {
+      if ((s.tool === 'clone' || s.tool === 'heal') && cloneOff === null) cloneOff = s.off;
+      S.strokes.push(s);
+      const t = (RT.has(s.tool) ? RTOOLS : MTOOLS).find(t => t.id === s.tool);
+      push((RT.has(s.tool) ? 'Ретушь: ' : 'Разметка: ') + t.name);
+    }
+    schedule();
+  }
+  if (view._erase) { view._erase = false; if (erasing) push('Ластик'); erasing = false; }
+  if (comparing) setCompare(false);
+};
+view.addEventListener('pointerup', pend); view.addEventListener('pointercancel', pend);
+view.addEventListener('wheel', e => {
+  if (!img || mode === 'crop') return;
+  e.preventDefault();
+  const p = pt(e);
+  if (e.ctrlKey || e.metaKey || e.altKey || vz === 1) {
+    const k = Math.exp(-clamp(e.deltaY, -60, 60) * (e.ctrlKey ? .02 : .004));
+    zoomAt(vz * k, p.x, p.y);
+  } else { panX -= e.deltaX; panY -= e.deltaY; clampPan(); schedule(); }
+}, {passive: false});
+view.addEventListener('dblclick', e => { if (mode !== 'crop' && mode !== 'markup' && mode !== 'retouch' && img) { const p = pt(e); zoomAt(vz > 1 ? 1 : Math.max(2, oneToOne()), p.x, p.y); } });
+
+const cmp = $('#btnCompare');
+cmp.addEventListener('pointerdown', e => { if (img) { cmp.setPointerCapture(e.pointerId); setCompare(true); cmp.classList.add('active'); } });
+['pointerup', 'pointercancel'].forEach(ev => cmp.addEventListener(ev, () => { setCompare(false); cmp.classList.remove('active'); }));
+
+/* ---------- modes ---------- */
+function setMode(m) {
+  if (HOOKS.gate && !HOOKS.gate(m)) return false;
+  mode = m;
+  HOOKS.mode.forEach(f => f(m));
+  document.querySelectorAll('.mode').forEach(b => b.setAttribute('aria-pressed', b.dataset.mode === m));
+  document.querySelectorAll('.pane').forEach(p => p.hidden = p.dataset.pane !== m);
+  $('#stageHint').textContent = m === 'crop' ? 'Тяните углы рамки, чтобы обрезать' : m === 'markup' ? 'Рисуйте на фото. Пробел + мышь двигают фото' : m === 'retouch' ? 'Штамп: Alt + клик — источник. [ и ] меняют размер кисти' : 'Удерживайте фото — сравнение. Колесо — масштаб';
+  view.style.cursor = m === 'markup' || m === 'retouch' ? 'crosshair' : '';
+  if (m === 'corr') syncCorr();
+  if (m === 'fx') syncFx();
+  $('#zoombar').hidden = m === 'crop';
+  updateZoomUI();
+  if (m === 'filters') renderThumbs();
+  if (m === 'curves') { drawCurve(); }
+  schedule();
+  return true;
+}
+$('.rail').addEventListener('click', e => { const b = e.target.closest('.mode'); if (b) setMode(b.dataset.mode); });
+
+/* ---------- history panel ---------- */
+function renderHistory() {
+  $('#history').innerHTML = hist.map((h, i) => `<li class="${i === hIdx ? 'cur' : i > hIdx ? 'fut' : ''}"><button data-i="${i}">${h.label}</button></li>`).join('');
+  $('#histCount').textContent = hist.length ? `${hIdx + 1} из ${hist.length}` : '';
+  $('#btnUndo').disabled = hIdx <= 0; $('#btnRedo').disabled = hIdx >= hist.length - 1;
+  const ol = $('#history'), cur = ol.querySelector('li.cur');
+  if (cur && (cur.offsetTop < ol.scrollTop || cur.offsetTop + cur.offsetHeight > ol.scrollTop + ol.clientHeight)) ol.scrollTop = cur.offsetTop - ol.clientHeight / 2;
+}
+$('#history').addEventListener('click', e => { const b = e.target.closest('button'); if (b) restore(+b.dataset.i); });
+$('#btnUndo').onclick = () => restore(hIdx - 1);
+$('#btnRedo').onclick = () => restore(hIdx + 1);
+
+function syncUI() { syncAdj(); syncFilters(); syncCrop(); syncMarkup(); syncCurves(); syncCorr(); syncFx(); syncRetouch(); HOOKS.sync.forEach(f => f()); clampPan(); updateZoomUI(); }
+
+/* ---------- UI: curves editor ---------- */
+const curveCv = $('#curve'), cctx = curveCv.getContext('2d');
+let curveCh = 'rgb', curveDrag = null, cw = 0;
+const CH_COL = {rgb: '#f5f5f7', r: '#ff453a', g: '#30d158', b: '#0a84ff'};
+const CURVE_PRESETS = [
+  {name: 'Линейная', c: null},
+  {name: 'Мягкий контраст', c: {rgb: [[0,0],[.25,.2],[.75,.8],[1,1]]}},
+  {name: 'Сильный контраст', c: {rgb: [[0,0],[.25,.14],[.75,.87],[1,1]]}},
+  {name: 'Матовая', c: {rgb: [[0,.09],[.3,.29],[.7,.72],[1,.95]]}},
+  {name: 'Светлее', c: {rgb: [[0,0],[.5,.62],[1,1]]}},
+  {name: 'Темнее', c: {rgb: [[0,0],[.5,.38],[1,1]]}},
+  {name: 'Кросс-процесс', c: {r: [[0,0],[.3,.22],[.7,.8],[1,1]], g: [[0,0],[.3,.25],[.7,.78],[1,1]], b: [[0,.1],[.5,.5],[1,.88]]}},
+  {name: 'Негатив', c: {rgb: [[0,1],[1,0]]}},
+];
+$('#curvePresets').innerHTML = CURVE_PRESETS.map((p, i) => `<button class="pill" data-i="${i}">${p.name}</button>`).join('');
+$('#curvePresets').addEventListener('click', e => {
+  const b = e.target.closest('.pill'); if (!b || !img) return;
+  const pr = CURVE_PRESETS[+b.dataset.i], d = defaultState().curves;
+  S.curves = Object.assign(d, pr.c ? JSON.parse(JSON.stringify(pr.c)) : {});
+  push('Кривые: ' + pr.name); syncCurves(); invalidate(true);
+});
+$('#curveCh').addEventListener('click', e => {
+  const b = e.target.closest('button'); if (!b) return;
+  curveCh = b.dataset.ch; syncCurves();
+});
+function syncCurves() {
+  $('#curveCh').querySelectorAll('button').forEach(b => b.setAttribute('aria-pressed', b.dataset.ch === curveCh));
+  const pts = S.curves[curveCh];
+  $('#curveVal').textContent = isLinear(pts) ? 'линейная' : `${pts.length} точ.`;
+  drawCurve();
+}
+new ResizeObserver(() => {
+  const r = curveCv.getBoundingClientRect(), d = devicePixelRatio || 1;
+  if (!r.width) return;
+  curveCv.width = Math.round(r.width * d); curveCv.height = Math.round(r.height * d); cw = r.width; drawCurve();
+}).observe(curveCv);
+const CP = 10;
+const c2p = (x, y) => [CP + x * (cw - 2 * CP), CP + (1 - y) * (cw - 2 * CP)];
+const p2c = (px, py) => [clamp((px - CP) / (cw - 2 * CP), 0, 1), clamp(1 - (py - CP) / (cw - 2 * CP), 0, 1)];
+function drawCurve() {
+  if (!cw || !curveCv.offsetParent) return;
+  const c = cctx, d = devicePixelRatio || 1, W = cw;
+  c.setTransform(d, 0, 0, d, 0, 0); c.clearRect(0, 0, W, W);
+  if (procD) {
+    const H = new Uint32Array(64), dd = procD.data, ch = {r: 0, g: 1, b: 2}[curveCh];
+    for (let k = 0; k < dd.length; k += 24) { const v = ch === undefined ? (.2126*dd[k] + .7152*dd[k+1] + .0722*dd[k+2]) : dd[k + ch]; H[v >> 2]++; }
+    let mx = 1; for (let i = 1; i < 63; i++) mx = Math.max(mx, H[i]);
+    c.fillStyle = 'rgba(255,255,255,.08)';
+    for (let i = 0; i < 64; i++) { const [x0] = c2p(i / 64, 0), [x1] = c2p((i + 1) / 64, 0), h = Math.min(1, H[i] / mx) * (W - 2 * CP); c.fillRect(x0, W - CP - h, x1 - x0 + .5, h); }
+  }
+  c.strokeStyle = 'rgba(255,255,255,.1)'; c.lineWidth = 1; c.beginPath();
+  for (let i = 0; i <= 4; i++) { const [x, y] = c2p(i / 4, i / 4); c.moveTo(Math.round(x) + .5, CP); c.lineTo(Math.round(x) + .5, W - CP); c.moveTo(CP, Math.round(y) + .5); c.lineTo(W - CP, Math.round(y) + .5); }
+  c.stroke();
+  c.strokeStyle = 'rgba(255,255,255,.18)'; c.setLineDash([3, 4]); c.beginPath(); c.moveTo(...c2p(0, 0)); c.lineTo(...c2p(1, 1)); c.stroke(); c.setLineDash([]);
+  ['rgb', 'r', 'g', 'b'].forEach(ch => {
+    if (ch === curveCh || isLinear(S.curves[ch])) return;
+    plot(S.curves[ch], CH_COL[ch], .35, 1.2);
+  });
+  plot(S.curves[curveCh], CH_COL[curveCh], 1, 2);
+  S.curves[curveCh].forEach(([x, y], i) => {
+    const [px, py] = c2p(x, y);
+    c.beginPath(); c.arc(px, py, 5, 0, 7);
+    c.fillStyle = curveDrag && curveDrag.i === i ? CH_COL[curveCh] : '#0e0e10'; c.fill();
+    c.strokeStyle = CH_COL[curveCh]; c.lineWidth = 1.5; c.stroke();
+  });
+  function plot(pts, col, a, lw) {
+    const f = monotone(pts);
+    c.globalAlpha = a; c.strokeStyle = col; c.lineWidth = lw; c.beginPath();
+    for (let i = 0; i <= 128; i++) { const x = i / 128, [px, py] = c2p(x, clamp(f(x), 0, 1)); i ? c.lineTo(px, py) : c.moveTo(px, py); }
+    c.stroke(); c.globalAlpha = 1;
+  }
+}
+const cpt = e => { const r = curveCv.getBoundingClientRect(); return [e.clientX - r.left, e.clientY - r.top]; };
+curveCv.addEventListener('pointerdown', e => {
+  if (!img) return;
+  curveCv.setPointerCapture(e.pointerId);
+  const [px, py] = cpt(e), pts = S.curves[curveCh];
+  let hit = -1, best = 14;
+  pts.forEach(([x, y], i) => { const [qx, qy] = c2p(x, y), dd = Math.hypot(qx - px, qy - py); if (dd < best) { best = dd; hit = i; } });
+  const before = JSON.stringify(S.curves);
+  if (hit < 0) {
+    const [x, y] = p2c(px, py);
+    if (pts.some(p => Math.abs(p[0] - x) < .03)) return;
+    pts.push([x, y]); pts.sort((a, b) => a[0] - b[0]);
+    hit = pts.findIndex(p => p[0] === x);
+  }
+  curveDrag = {i: hit, before};
+  invalidate(false); drawCurve();
+});
+curveCv.addEventListener('pointermove', e => {
+  if (!curveDrag) return;
+  const pts = S.curves[curveCh], i = curveDrag.i;
+  let [x, y] = p2c(...cpt(e));
+  if (i === 0) x = Math.min(x, pts[1][0] - .02);
+  else if (i === pts.length - 1) x = Math.max(x, pts[i - 1][0] + .02);
+  else x = clamp(x, pts[i - 1][0] + .02, pts[i + 1][0] - .02);
+  pts[i] = [Math.round(x * 1000) / 1000, Math.round(y * 1000) / 1000];
+  $('#curveVal').textContent = `вход ${Math.round(x * 255)} → выход ${Math.round(y * 255)}`;
+  invalidate(false); drawCurve();
+});
+const curveEnd = () => {
+  if (!curveDrag) return;
+  const changed = curveDrag.before !== JSON.stringify(S.curves);
+  curveDrag = null;
+  if (changed) { push('Кривые: ' + {rgb: 'RGB', r: 'красный', g: 'зеленый', b: 'синий'}[curveCh]); scheduleThumbs(); }
+  syncCurves();
+};
+curveCv.addEventListener('pointerup', curveEnd); curveCv.addEventListener('pointercancel', curveEnd);
+curveCv.addEventListener('dblclick', e => {
+  const [px, py] = cpt(e), pts = S.curves[curveCh];
+  const i = pts.findIndex(([x, y], k) => k > 0 && k < pts.length - 1 && Math.hypot(c2p(x, y)[0] - px, c2p(x, y)[1] - py) < 14);
+  if (i > 0) { pts.splice(i, 1); push('Кривые: точка удалена'); syncCurves(); invalidate(true); }
+});
+function updateDocInfo() {
+  if (!img) return;
+  const [OW, OH] = oriented(img.full.width, img.full.height), c = S.geom.crop;
+  const w = Math.round(c.w * OW), h = Math.round(c.h * OH);
+  $('#docinfo').textContent = `${img.name} · ${w}×${h} px`;
+}
+
+/* ---------- revert ---------- */
+let revT = 0;
+$('#btnRevert').onclick = () => {
+  const b = $('#btnRevert');
+  if (!img) return;
+  if (!b.classList.contains('warn')) {
+    b.classList.add('warn'); b.firstElementChild.textContent = 'Вернуть к оригиналу?';
+    clearTimeout(revT); revT = setTimeout(() => { b.classList.remove('warn'); b.firstElementChild.textContent = 'Вернуть'; }, 3000);
+    return;
+  }
+  clearTimeout(revT); b.classList.remove('warn'); b.firstElementChild.textContent = 'Вернуть';
+  S = defaultState(); push('Вернуть к оригиналу'); syncUI(); invalidate(true);
+};
+
+/* ---------- open file ---------- */
+const toastEl = $('#toast'); let toastT = 0;
+function toast(msg) { toastEl.textContent = msg; toastEl.hidden = false; clearTimeout(toastT); toastT = setTimeout(() => toastEl.hidden = true, 3200); }
+// Returns a drawable (canvas or image) for any supported file: JPEG/PNG/WebP natively, RAW/HEIC via modules.
+async function decodeFile(file) {
+  for (const d of HOOKS.decode) { const c = await d(file); if (c) return c; }
+  const url = URL.createObjectURL(file), im = new Image();
+  im.src = url;
+  try { await im.decode(); return im; } finally { setTimeout(() => URL.revokeObjectURL(url), 1000); }
+}
+async function loadFile(file) {
+  if (!file) return;
+  try {
+    const src = await decodeFile(file);
+    setImage(src, file.name.replace(/\.[^.]+$/, ''));
+    toast('Фото открыто');
+  } catch (e) {
+    if (e && e.silent) return;
+    console.error(e);
+    toast('Не удалось открыть этот файл. Поддерживаются JPEG, PNG, WebP, HEIC и RAW (CR2, CR3, NEF, ARW, DNG, RAF, ORF, RW2).');
+  }
+}
+$('#btnOpen').onclick = () => $('#file').click();
+$('#file').onchange = e => { loadFile(e.target.files[0]); e.target.value = ''; };
+let dragN = 0;
+window.addEventListener('dragenter', e => { if (e.dataTransfer && [...e.dataTransfer.types].includes('Files')) { dragN++; $('#drop').hidden = false; } });
+window.addEventListener('dragleave', () => { dragN = Math.max(0, dragN - 1); if (!dragN) $('#drop').hidden = true; });
+window.addEventListener('dragover', e => e.preventDefault());
+window.addEventListener('drop', e => { e.preventDefault(); dragN = 0; $('#drop').hidden = true; const f = [...(e.dataTransfer.files || [])][0]; if (f) loadFile(f); });
+window.addEventListener('paste', e => { const it = [...(e.clipboardData && e.clipboardData.items || [])].find(i => i.type.startsWith('image/')); if (it) loadFile(it.getAsFile()); });
+
+/* ---------- keyboard ---------- */
+const native = window.lumenNative || null;
+function command(cmd) {
+  switch (cmd) {
+    case 'open': $('#file').click(); break;
+    case 'export': openExport(); break;
+    case 'undo': restore(hIdx - 1); break;
+    case 'redo': restore(hIdx + 1); break;
+    case 'zoomIn': zoomAt(vz * 1.5); break;
+    case 'zoomOut': zoomAt(vz / 1.5); break;
+    case 'zoomFit': zoomAt(1); break;
+    case 'zoom100': zoomAt(oneToOne()); break;
+    case 'revert': S = defaultState(); push('Вернуть к оригиналу'); syncUI(); invalidate(true); break;
+    case 'grid': toggleGrid(); break;
+    default:
+      if (cmd.startsWith('mode:')) setMode(cmd.slice(5));
+      else if (cmd.startsWith('corr:')) openCorr(cmd.slice(5));
+      else if (cmd.startsWith('fx:')) { setMode('fx'); selFx = cmd.slice(3); syncFx(); }
+      else if (cmd.startsWith('tool:')) pickTool(cmd.slice(5));
+      else if (window.Lumen && Lumen.commands[cmd]) Lumen.commands[cmd]();
+  }
+}
+window.addEventListener('keydown', e => {
+  if (e.target.closest && e.target.closest('input, textarea, select')) return;
+  for (const f of HOOKS.keydown) if (f(e)) return;
+  const mod = e.ctrlKey || e.metaKey, k = e.key.toLowerCase(), code = e.code;
+  // in the desktop app the native menu owns these shortcuts
+  if (mod && !native) {
+    let cmd = null;
+    if (code === 'KeyZ') cmd = e.shiftKey ? 'redo' : 'undo';
+    else if (code === 'KeyY') cmd = 'redo';
+    else if (code === 'KeyO') cmd = 'open';
+    else if (code === 'KeyS') cmd = 'export';
+    else if (code === 'KeyM') cmd = 'mode:curves';
+    else if (k === '=' || k === '+' || code === 'Equal' || code === 'NumpadAdd') cmd = 'zoomIn';
+    else if (k === '-' || code === 'Minus' || code === 'NumpadSubtract') cmd = 'zoomOut';
+    else if (code === 'Digit0' || code === 'Numpad0') cmd = 'zoomFit';
+    else if (code === 'Digit1' || code === 'Numpad1') cmd = 'zoom100';
+    if (cmd) { e.preventDefault(); command(cmd); return; }
+  }
+  const onRuler = e.target.classList && e.target.classList.contains('ruler');
+  if (code === 'Space' && img && !onRuler) { e.preventDefault(); if (!spaceHand) { spaceHand = true; updateZoomUI(); } }
+  else if (code === 'Backslash' && !e.repeat && img) { e.preventDefault(); setCompare(true); }
+  else if (e.key === 'Escape' && !$('#exp').hidden) closeExport();
+  else if (!mod && !e.altKey && img && $('#exp').hidden) {
+    // Photoshop tool letters
+    const TOOLKEYS = {KeyB: 'pen', KeyE: 'eraser', KeyT: 'text', KeyU: 'rect', KeyI: 'picker', KeyS: 'clone', KeyJ: 'spot', KeyO: 'dodge', KeyR: 'blurb'};
+    if (TOOLKEYS[code]) { e.preventDefault(); pickTool(TOOLKEYS[code]); }
+    else if (code === 'KeyC') { e.preventDefault(); setMode('crop'); }
+    else if (code === 'BracketLeft' || code === 'BracketRight') { e.preventDefault(); brushSize(code === 'BracketRight' ? 1 : -1); }
+  }
+});
+window.addEventListener('keyup', e => {
+  if (e.code === 'Space') { spaceHand = false; updateZoomUI(); }
+  if (e.code === 'Backslash' && comparing) setCompare(false);
+});
+window.addEventListener('blur', () => { spaceHand = false; if (comparing) setCompare(false); updateZoomUI(); });
+
+/* ---------- desktop app bridge (Electron) ---------- */
+if (native) {
+  document.documentElement.classList.add('desktop');
+  native.onMenu(cmd => command(cmd));
+  native.onOpenFile(({name, data}) => {
+    const ext = (name.split('.').pop() || '').toLowerCase();
+    const type = {jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', webp: 'image/webp', gif: 'image/gif'}[ext] || 'image/*';
+    loadFile(new File([data], name, {type}));
+  });
+}
+
+
+/* ---------- export ---------- */
+let expCanvas = null, expUrl = null, expFmt = 'jpeg', expBlob = null;
+$('#btnExport').onclick = openExport;
+$('#expClose').onclick = closeExport;
+$('#exp').addEventListener('click', e => { if (e.target.id === 'exp') closeExport(); });
+$('#expFmt').addEventListener('click', e => { const b = e.target.closest('button'); if (!b) return; expFmt = b.dataset.f; $('#expFmt').querySelectorAll('button').forEach(x => x.setAttribute('aria-pressed', x === b)); encode(); });
+function closeExport() { $('#exp').hidden = true; }
+async function openExport() {
+  if (!img) return;
+  $('#exp').hidden = false; $('#expImg').hidden = true; $('#expBusy').hidden = false; $('#expMeta').textContent = '';
+  await new Promise(r => requestAnimationFrame(() => setTimeout(r, 30)));
+  if (Lumen.loadLayerFonts) await Lumen.loadLayerFonts();
+  const full = img.full, w = full.width, h = full.height;
+  const fd = full.getContext('2d', {willReadFrequently:true}).getImageData(0, 0, w, h);
+  const p = params(S);
+  const sp = (p.sharpness || p.definition || p.noise) ? spatial(fd.data, w, h, p) : null;
+  const od = new ImageData(w, h);
+  colorPass(sp || fd.data, sp ? 3 : 4, od.data, w * h, p, fd.data);
+  corrPass(od.data, w * h, S.cor);
+  fxPass(od.data, w, h, S.fx);
+  const pc = mk(w, h); pc.getContext('2d').putImageData(od, 0, 0);
+  const [OW, OH] = oriented(w, h), c = S.geom.crop;
+  const cw = Math.max(1, Math.round(c.w * OW)), ch = Math.max(1, Math.round(c.h * OH));
+  expFull = mk(cw, ch);
+  const x = expFull.getContext('2d');
+  drawGeomOutput(x, pc, cw, ch);
+  S.strokes.filter(s => RT.has(s.tool)).forEach(s => applyRetouch(expFull, s));
+  HOOKS.out.forEach(f => f(expFull, 'export'));
+  vignette(x, cw, ch, p.vignette);
+  S.strokes.forEach(s => drawStroke(x, s, cw, ch));
+  HOOKS.overlay.forEach(f => f(x, cw, ch, false));
+  if (Lumen.watermark) Lumen.watermark(x, cw, ch);
+  $('#expW').value = cw; $('#expW').max = cw;
+  resizeExport(cw);
+}
+let expFull = null, encT = 0;
+function resizeExport(nw) {
+  if (!expFull) return;
+  nw = clamp(Math.round(nw) || expFull.width, 16, expFull.width);
+  const nh = Math.max(1, Math.round(expFull.height * nw / expFull.width));
+  $('#expH').textContent = `× ${nh} px`;
+  if (nw === expFull.width) expCanvas = expFull;
+  else {
+    // step down by halves for a clean downscale, like Photoshop's bicubic sharper
+    let src = expFull;
+    while (src.width / 2 > nw) { const t = mk(Math.round(src.width / 2), Math.round(src.height / 2)); const tx = t.getContext('2d'); tx.imageSmoothingQuality = 'high'; tx.drawImage(src, 0, 0, t.width, t.height); src = t; }
+    expCanvas = mk(nw, nh); const ex = expCanvas.getContext('2d'); ex.imageSmoothingQuality = 'high'; ex.drawImage(src, 0, 0, nw, nh);
+  }
+  encode();
+}
+$('#expW').addEventListener('input', e => { clearTimeout(encT); encT = setTimeout(() => resizeExport(+e.target.value), 350); });
+$('#expScale').addEventListener('click', e => { const b = e.target.closest('.pill'); if (!b || !expFull) return; const nw = Math.round(expFull.width * +b.dataset.s); $('#expW').value = nw; resizeExport(nw); });
+function encode() {
+  if (!expCanvas) return;
+  const type = expFmt === 'png' ? 'image/png' : 'image/jpeg';
+  let srcC = expCanvas;
+  if (type === 'image/jpeg') { srcC = mk(expCanvas.width, expCanvas.height); const t = srcC.getContext('2d'); t.fillStyle = '#fff'; t.fillRect(0, 0, srcC.width, srcC.height); t.drawImage(expCanvas, 0, 0); }
+  srcC.toBlob(b => {
+    expBlob = b;
+    if (expUrl) URL.revokeObjectURL(expUrl);
+    expUrl = URL.createObjectURL(b);
+    const im = $('#expImg'); im.src = expUrl; im.hidden = false; $('#expBusy').hidden = true;
+    $('#expMeta').textContent = `${expCanvas.width}×${expCanvas.height} px · ${expFmt.toUpperCase()} · ${(b.size / 1048576).toFixed(2)} МБ`;
+  }, type, window.LumenPrefs ? window.LumenPrefs.jpeg : .92);
+}
+let dl = null;
+if (window.claude && window.claude.use) window.claude.use('downloads').then(d => { dl = d; }).catch(() => {});
+$('#expSave').onclick = async () => {
+  if (!expUrl || !expBlob) return;
+  const filename = `${img.name}-lumen.${expFmt === 'png' ? 'png' : 'jpg'}`.replace(/[\\/:*?"<>|]/g, '');
+  if (native && native.saveFile) {
+    try { const r = await native.saveFile(filename, expBlob); if (r === 'saved') toast('Файл сохранен'); }
+    catch (e) { toast('Не получилось сохранить файл'); }
+    return;
+  }
+  if (dl) {
+    try { await dl.save({filename, data: expBlob}); toast('Файл сохранён'); }
+    catch (e) { if (e && e.code === 'declined') return; toast('Не получилось сохранить. Нажмите на картинку правой кнопкой → «Сохранить изображение как…».'); }
+    return;
+  }
+  const a = document.createElement('a');
+  a.href = expUrl; a.download = `${img.name}-lumen.${expFmt === 'png' ? 'png' : 'jpg'}`;
+  document.body.appendChild(a); a.click(); a.remove();
+};
+$('#expCopy').onclick = () => {
+  if (!expCanvas) return;
+  try {
+    const pr = new Promise(res => expCanvas.toBlob(res, 'image/png'));
+    navigator.clipboard.write([new ClipboardItem({'image/png': pr})]).then(() => toast('Скопировано в буфер обмена'), () => toast('Браузер не дал скопировать. Сохраните картинку правой кнопкой.'));
+  } catch (e) { toast('Браузер не дал скопировать. Сохраните картинку правой кнопкой.'); }
+};
+
+/* ---------- sample photo (generated, so the editor opens with a picture) ---------- */
+function makeSample() {
+  const W = 1600, H = 1066, c = mk(W, H), x = c.getContext('2d');
+  let seed = 11; const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+  const hz = H * .6;
+  let g = x.createLinearGradient(0, 0, 0, hz);
+  g.addColorStop(0, '#1b2860'); g.addColorStop(.4, '#5c4a8c'); g.addColorStop(.72, '#e07a5c'); g.addColorStop(1, '#ffca7c');
+  x.fillStyle = g; x.fillRect(0, 0, W, hz);
+  const sx = W * .66, sy = hz - H * .06;
+  g = x.createRadialGradient(sx, sy, 0, sx, sy, H * .55);
+  g.addColorStop(0, 'rgba(255,246,215,1)'); g.addColorStop(.05, 'rgba(255,226,160,.95)'); g.addColorStop(.22, 'rgba(255,170,110,.4)'); g.addColorStop(1, 'rgba(255,150,100,0)');
+  x.fillStyle = g; x.fillRect(0, 0, W, hz);
+  for (let i = 0; i < 16; i++) {
+    const cx = rnd() * W, cy = H * (.06 + rnd() * .34), rw = 120 + rnd() * 280, rh = 12 + rnd() * 26;
+    const cg = x.createRadialGradient(cx, cy, 0, cx, cy, rw);
+    cg.addColorStop(0, `rgba(255,${(170 + rnd() * 60) | 0},${(140 + rnd() * 70) | 0},${.22 + rnd() * .28})`); cg.addColorStop(1, 'rgba(255,190,170,0)');
+    x.save(); x.translate(cx, cy); x.scale(1, rh / rw); x.translate(-cx, -cy); x.fillStyle = cg; x.beginPath(); x.arc(cx, cy, rw, 0, 7); x.fill(); x.restore();
+  }
+  const ridge = (n, rough) => { const a = new Float32Array(n + 1); a[0] = rnd(); a[n] = rnd(); let step = n, sc = 1; while (step > 1) { const h = step / 2; for (let i = h; i < n; i += step) a[i] = (a[i - h] + a[i + h]) / 2 + (rnd() - .5) * sc; sc *= rough; step = h; } return a; };
+  const mount = (base, amp, fill) => { const a = ridge(256, .55); x.beginPath(); x.moveTo(0, hz + 2); for (let i = 0; i <= 256; i++) x.lineTo(i / 256 * W, base - (a[i] + .3) * amp); x.lineTo(W, hz + 2); x.closePath(); x.fillStyle = fill; x.fill(); };
+  g = x.createLinearGradient(0, hz - 300, 0, hz); g.addColorStop(0, '#8a6aa0'); g.addColorStop(1, '#c58b84');
+  mount(hz - 10, 230, g);
+  g = x.createLinearGradient(0, hz - 220, 0, hz); g.addColorStop(0, '#4a3a6c'); g.addColorStop(1, '#6b4f78');
+  mount(hz + 4, 170, g);
+  g = x.createLinearGradient(0, hz - 120, 0, hz); g.addColorStop(0, '#2a2246'); g.addColorStop(1, '#3a2c52');
+  mount(hz + 8, 90, g);
+  g = x.createLinearGradient(0, hz, 0, H); g.addColorStop(0, '#6a5280'); g.addColorStop(1, '#141830');
+  x.fillStyle = g; x.fillRect(0, hz, W, H - hz);
+  x.save(); x.globalAlpha = .38; x.translate(0, hz * 2); x.scale(1, -1); x.drawImage(c, 0, hz - (H - hz), W, H - hz, 0, hz - (H - hz), W, H - hz); x.restore();
+  for (let i = 0; i < 70; i++) {
+    const y = hz + 4 + Math.pow(rnd(), 1.4) * (H - hz) * .7, spread = 20 + (y - hz) * .5, w = 10 + rnd() * 70;
+    x.fillStyle = `rgba(255,${(200 + rnd() * 40) | 0},150,${.15 + rnd() * .45 * (1 - (y - hz) / (H - hz))})`;
+    x.fillRect(sx + (rnd() - .5) * spread * 2 - w / 2, y, w, 1.5 + rnd() * 2);
+  }
+  for (let i = 0; i < 90; i++) { const y = hz + rnd() * (H - hz); x.fillStyle = `rgba(255,255,255,${.02 + rnd() * .05})`; x.fillRect(rnd() * W, y, 30 + rnd() * 160, 1); }
+  x.fillStyle = '#0c1412';
+  x.beginPath(); x.moveTo(0, H * .8); x.bezierCurveTo(W * .15, H * .78, W * .3, H * .86, W * .45, H * .9); x.lineTo(W * .45, H); x.lineTo(0, H); x.fill();
+  x.beginPath(); x.moveTo(W, H * .84); x.bezierCurveTo(W * .9, H * .85, W * .82, H * .93, W * .76, H); x.lineTo(W, H); x.fill();
+  const pine = (px, py, h) => { const w = h * .32; x.fillRect(px - h * .02, py - h * .15, h * .04, h * .15); for (let t = 0; t < 5; t++) { const ty = py - h * .12 - t * h * .17, tw = w * (1 - t * .17); x.beginPath(); x.moveTo(px - tw / 2, ty); x.lineTo(px + tw / 2, ty); x.lineTo(px, ty - h * .28); x.closePath(); x.fill(); } };
+  [[40, H * .82, 300], [120, H * .81, 230], [190, H * .83, 270], [270, H * .85, 180], [345, H * .87, 140], [W - 60, H * .87, 290], [W - 150, H * .9, 200], [W - 225, H * .93, 150]].forEach(a => pine(...a));
+  const d = x.getImageData(0, 0, W, H), p = d.data;
+  for (let k = 0; k < p.length; k += 4) { const nz = (rnd() - .5) * 9; p[k] += nz; p[k + 1] += nz; p[k + 2] += nz; }
+  x.putImageData(d, 0, 0);
+  return c;
+}
+
+/* =====================================================================
+   Photoshop pack: Image > Adjustments, Filter menu, retouch tools,
+   shapes and type, eyedropper, info, grid
+   ===================================================================== */
+
+/* ---------- corrections: pixel math ---------- */
+const TONES = [{id: 's', name: 'Тени'}, {id: 'm', name: 'Средние тона'}, {id: 'h', name: 'Света'}];
+const HUE_RANGES = [{id: 'all', name: 'Все'}, {id: 'red', name: 'Красные', c: 0}, {id: 'yellow', name: 'Желтые', c: 60}, {id: 'green', name: 'Зеленые', c: 120}, {id: 'cyan', name: 'Голубые', c: 180}, {id: 'blue', name: 'Синие', c: 240}, {id: 'magenta', name: 'Пурпурные', c: 300}];
+const PHOTO_F = [{id: 'none', name: 'Нет'}, {id: 'warm85', name: 'Теплый (85)', c: [236, 138, 0]}, {id: 'warm81', name: 'Теплый (81)', c: [235, 177, 19]}, {id: 'cool80', name: 'Холодный (80)', c: [0, 109, 255]}, {id: 'cool82', name: 'Холодный (82)', c: [0, 181, 255]}, {id: 'sepia', name: 'Сепия', c: [172, 122, 51]}, {id: 'red', name: 'Красный', c: [234, 26, 26]}, {id: 'green', name: 'Зеленый', c: [25, 201, 25]}, {id: 'blue', name: 'Синий', c: [29, 53, 234]}, {id: 'under', name: 'Под водой', c: [0, 194, 177]}, {id: 'violet', name: 'Фиолетовый', c: [225, 0, 152]}];
+const GMAPS = [{id: 'none', name: 'Нет'}, {id: 'bw', name: 'Черно-белая', s: ['#000000', '#ffffff']}, {id: 'sepia', name: 'Сепия', s: ['#1a0f05', '#8a5a2b', '#f3e2c0']}, {id: 'duo', name: 'Синий и оранжевый', s: ['#0b1d4d', '#e07a3c', '#ffe9c7']}, {id: 'violet', name: 'Фиолетовый и желтый', s: ['#2a0845', '#c2185b', '#ffd60a']}, {id: 'teal', name: 'Бирюзовый и розовый', s: ['#002b36', '#2aa198', '#ffb3c7']}, {id: 'night', name: 'Ночь', s: ['#000000', '#14305e', '#9fd3ff']}];
+const zero3 = a => !a[0] && !a[1] && !a[2];
+function corrActive(c, id) {
+  switch (id) {
+    case 'levels': { const l = c.levels; return l[0] !== 0 || l[1] !== 0 || l[2] !== 255 || l[3] !== 0 || l[4] !== 255; }
+    case 'balance': return !(zero3(c.balance.s) && zero3(c.balance.m) && zero3(c.balance.h));
+    case 'hsl': return Object.values(c.hsl).some(a => !zero3(a));
+    case 'photo': return c.photo !== 'none' && c.density > 0;
+    case 'gmap': return c.gmap !== 'none' && c.gamt > 0;
+    case 'desat': return !!c.desat;
+    case 'invert': return !!c.invert;
+    case 'posterize': return c.posterize >= 2;
+    case 'threshold': return c.threshold > 0;
+  }
+  return false;
+}
+function hexRgb(h) { const n = parseInt(h.slice(1), 16); return [n >> 16 & 255, n >> 8 & 255, n & 255]; }
+const gradCache = {};
+function gradLut(id) {
+  if (gradCache[id]) return gradCache[id];
+  const st = GMAPS.find(g => g.id === id).s.map(hexRgb), l = new Float32Array(256 * 3);
+  for (let i = 0; i < 256; i++) {
+    const t = i / 255 * (st.length - 1), k = Math.min(st.length - 2, Math.floor(t)), f = t - k;
+    for (let c = 0; c < 3; c++) l[i * 3 + c] = st[k][c] + (st[k + 1][c] - st[k][c]) * f;
+  }
+  return gradCache[id] = l;
+}
+function hue2(p, q, t) { if (t < 0) t += 1; if (t > 1) t -= 1; if (t < 1 / 6) return p + (q - p) * 6 * t; if (t < .5) return q; if (t < 2 / 3) return p + (q - p) * (2 / 3 - t) * 6; return p; }
+const HO = [0, 0, 0];
+function hslAdj(r, g, b, hr) {
+  r /= 255; g /= 255; b /= 255;
+  const mx = Math.max(r, g, b), mn = Math.min(r, g, b), dd = mx - mn;
+  let l = (mx + mn) / 2, h = 0, s = 0;
+  if (dd > 1e-6) {
+    s = l > .5 ? dd / (2 - mx - mn) : dd / (mx + mn);
+    h = (mx === r ? (g - b) / dd + (g < b ? 6 : 0) : mx === g ? (b - r) / dd + 2 : (r - g) / dd + 4) * 60;
+  }
+  let dh = hr[0][0], ds = hr[0][1], dl = hr[0][2];
+  if (s > .03) for (let i = 1; i < hr.length; i++) {
+    const v = hr[i]; if (!v[0] && !v[1] && !v[2]) continue;
+    let dist = Math.abs(h - HUE_RANGES[i].c); if (dist > 180) dist = 360 - dist;
+    const w = dist <= 15 ? 1 : dist >= 45 ? 0 : (45 - dist) / 30;
+    if (w) { dh += v[0] * w; ds += v[1] * w; dl += v[2] * w; }
+  }
+  h = ((h + dh) % 360 + 360) % 360;
+  s = clamp(ds >= 0 ? s + (1 - s) * ds / 100 * (s > .03 ? 1 : 0) : s * (1 + ds / 100), 0, 1);
+  l = clamp(dl >= 0 ? l + (1 - l) * dl / 100 : l * (1 + dl / 100), 0, 1);
+  if (s <= 0) { HO[0] = HO[1] = HO[2] = l * 255; return; }
+  const q = l < .5 ? l * (1 + s) : l + s - l * s, p = 2 * l - q, hk = h / 360;
+  HO[0] = hue2(p, q, hk + 1 / 3) * 255; HO[1] = hue2(p, q, hk) * 255; HO[2] = hue2(p, q, hk - 1 / 3) * 255;
+}
+function corrPass(d, n, c) {
+  if (!c) return;
+  const A = id => corrActive(c, id);
+  const LV = A('levels'), BA = A('balance'), HS = A('hsl'), PH = A('photo'), GM = A('gmap'), DS = c.desat, IV = c.invert, PO = A('posterize'), TH = A('threshold');
+  if (!(LV || BA || HS || PH || GM || DS || IV || PO || TH)) return;
+  let lv = null, lt = null;
+  if (LV) {
+    const [ib, g, iw, ob, ow] = c.levels, gm = Math.pow(2, g / 50);
+    lv = new Uint8ClampedArray(256);
+    for (let i = 0; i < 256; i++) { const v = Math.pow(clamp((i - ib) / Math.max(1, iw - ib), 0, 1), 1 / gm); lv[i] = ob + v * (ow - ob); }
+  }
+  if (PO || IV) {
+    lt = new Uint8ClampedArray(256); const L = c.posterize;
+    for (let i = 0; i < 256; i++) { let v = i; if (PO) v = Math.round(Math.round(v / 255 * (L - 1)) / (L - 1) * 255); if (IV) v = 255 - v; lt[i] = v; }
+  }
+  const bal = BA ? [c.balance.s, c.balance.m, c.balance.h].map(a => { const m = (a[0] + a[1] + a[2]) / 3; return [(a[0] - m) * .6, (a[1] - m) * .6, (a[2] - m) * .6]; }) : null;
+  const hr = HS ? HUE_RANGES.map(r => c.hsl[r.id]) : null;
+  const ph = PH ? PHOTO_F.find(f => f.id === c.photo).c : null, dens = c.density / 100 * .55;
+  const gl = GM ? gradLut(c.gmap) : null, ga = c.gamt / 100, th = c.threshold;
+  for (let k = 0; k < n * 4; k += 4) {
+    let r = d[k], g = d[k + 1], b = d[k + 2];
+    if (lv) { r = lv[r]; g = lv[g]; b = lv[b]; }
+    if (bal) {
+      const L = (.299 * r + .587 * g + .114 * b) / 255, ws = (1 - L) * (1 - L), wh = L * L, wm = Math.max(0, 1 - ws - wh);
+      r += ws * bal[0][0] + wm * bal[1][0] + wh * bal[2][0];
+      g += ws * bal[0][1] + wm * bal[1][1] + wh * bal[2][1];
+      b += ws * bal[0][2] + wm * bal[1][2] + wh * bal[2][2];
+    }
+    if (hr) { hslAdj(clamp(r, 0, 255), clamp(g, 0, 255), clamp(b, 0, 255), hr); r = HO[0]; g = HO[1]; b = HO[2]; }
+    if (ph) {
+      const L0 = .299 * r + .587 * g + .114 * b;
+      const r2 = r + (ph[0] - r) * dens, g2 = g + (ph[1] - g) * dens, b2 = b + (ph[2] - b) * dens;
+      const L1 = .299 * r2 + .587 * g2 + .114 * b2, f = L1 > 1 ? L0 / L1 : 1;
+      r = r2 * f; g = g2 * f; b = b2 * f;
+    }
+    if (gl) {
+      const i3 = clamp(Math.round(.299 * r + .587 * g + .114 * b), 0, 255) * 3;
+      r += (gl[i3] - r) * ga; g += (gl[i3 + 1] - g) * ga; b += (gl[i3 + 2] - b) * ga;
+    }
+    if (DS) { r = g = b = .299 * r + .587 * g + .114 * b; }
+    if (TH) { r = g = b = (.299 * r + .587 * g + .114 * b) >= th ? 255 : 0; }
+    if (lt) { r = lt[clamp(r | 0, 0, 255)]; g = lt[clamp(g | 0, 0, 255)]; b = lt[clamp(b | 0, 0, 255)]; }
+    d[k] = r; d[k + 1] = g; d[k + 2] = b;
+  }
+}
+
+/* ---------- Filter menu: pixel math ---------- */
+function toF3(d, n) { const f = new Float32Array(n * 3); for (let i = 0, k = 0; i < n; i++, k += 4) { f[i * 3] = d[k]; f[i * 3 + 1] = d[k + 1]; f[i * 3 + 2] = d[k + 2]; } return f; }
+function fromF3(f, d, n) { for (let i = 0, k = 0; i < n; i++, k += 4) { d[k] = f[i * 3]; d[k + 1] = f[i * 3 + 1]; d[k + 2] = f[i * 3 + 2]; } }
+function hBlur(src, w, h, r) {
+  const dst = new Float32Array(src.length), inv = 1 / (r + r + 1);
+  for (let y = 0; y < h; y++) {
+    const row = y * w * 3;
+    for (let c = 0; c < 3; c++) {
+      let sum = 0;
+      for (let x = -r; x <= r; x++) sum += src[row + clamp(x, 0, w - 1) * 3 + c];
+      for (let x = 0; x < w; x++) {
+        dst[row + x * 3 + c] = sum * inv;
+        sum += src[row + Math.min(w - 1, x + r + 1) * 3 + c] - src[row + Math.max(0, x - r) * 3 + c];
+      }
+    }
+  }
+  return dst;
+}
+function fxPass(d, w, h, fx) {
+  if (!fx) return;
+  const n = w * h, sc = Math.max(w, h) / 1400;
+  if (fx.blur > 0) {
+    const r = Math.max(1, Math.round(fx.blur / 100 * 16 * sc));
+    let f = toF3(d, n); f = boxBlur(boxBlur(boxBlur(f, w, h, r), w, h, r), w, h, r); fromF3(f, d, n);
+  }
+  if (fx.motion > 0) {
+    const r = Math.max(1, Math.round(fx.motion / 100 * 36 * sc));
+    let f = toF3(d, n); f = hBlur(hBlur(f, w, h, r), w, h, r); fromF3(f, d, n);
+  }
+  if (fx.mosaic > 0) {
+    const cs = Math.max(2, Math.round((2 + fx.mosaic / 100 * 46) * sc));
+    for (let by = 0; by < h; by += cs) for (let bx = 0; bx < w; bx += cs) {
+      const ex = Math.min(w, bx + cs), ey = Math.min(h, by + cs);
+      let r = 0, g = 0, b = 0, c = 0;
+      for (let y = by; y < ey; y++) for (let x = bx; x < ex; x++) { const k = (y * w + x) * 4; r += d[k]; g += d[k + 1]; b += d[k + 2]; c++; }
+      r /= c; g /= c; b /= c;
+      for (let y = by; y < ey; y++) for (let x = bx; x < ex; x++) { const k = (y * w + x) * 4; d[k] = r; d[k + 1] = g; d[k + 2] = b; }
+    }
+  }
+  if (fx.emboss > 0 || fx.edges > 0) {
+    const L = new Float32Array(n);
+    for (let i = 0, k = 0; i < n; i++, k += 4) L[i] = .299 * d[k] + .587 * d[k + 1] + .114 * d[k + 2];
+    const at = (x, y) => L[clamp(y, 0, h - 1) * w + clamp(x, 0, w - 1)];
+    const o = Math.max(1, Math.round(sc));
+    const ae = fx.emboss / 100, ad = fx.edges / 100;
+    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+      const k = (y * w + x) * 4;
+      if (ae > 0) {
+        const e = clamp(128 + (at(x + o, y + o) - at(x - o, y - o)) * 2.2, 0, 255);
+        d[k] += (e - d[k]) * ae; d[k + 1] += (e - d[k + 1]) * ae; d[k + 2] += (e - d[k + 2]) * ae;
+      }
+      if (ad > 0) {
+        const gx = at(x + o, y - o) + 2 * at(x + o, y) + at(x + o, y + o) - at(x - o, y - o) - 2 * at(x - o, y) - at(x - o, y + o);
+        const gy = at(x - o, y + o) + 2 * at(x, y + o) + at(x + o, y + o) - at(x - o, y - o) - 2 * at(x, y - o) - at(x + o, y - o);
+        const e = 255 - clamp(Math.hypot(gx, gy) * .9, 0, 255);
+        d[k] += (e - d[k]) * ad; d[k + 1] += (e - d[k + 1]) * ad; d[k + 2] += (e - d[k + 2]) * ad;
+      }
+    }
+  }
+  if (fx.noise > 0) {
+    const a = fx.noise / 100 * 75; let s = 0x2545F491;
+    for (let k = 0; k < n * 4; k += 4) {
+      s ^= s << 13; s ^= s >>> 17; s ^= s << 5; const u1 = (s >>> 0) / 4294967296;
+      s ^= s << 13; s ^= s >>> 17; s ^= s << 5; const u2 = (s >>> 0) / 4294967296;
+      const z = (u1 + u2 - 1) * a;
+      d[k] += z; d[k + 1] += z; d[k + 2] += z;
+    }
+  }
+}
+
+/* ---------- retouch: brush layer composited on the rendered photo ---------- */
+const outC = document.createElement('canvas'), outX = outC.getContext('2d', {willReadFrequently: true});
+const rtBase = document.createElement('canvas'); let rtBaseKey = '';
+const rtLayer = document.createElement('canvas');
+let outKey = '', cloneSrc = null, cloneOff = null;
+function strokePath(ctx, pts, W, H, lw) {
+  ctx.beginPath();
+  if (pts.length === 1) { ctx.arc(pts[0][0] * W, pts[0][1] * H, lw / 2, 0, 7); ctx.fill(); return; }
+  ctx.moveTo(pts[0][0] * W, pts[0][1] * H);
+  for (let i = 1; i < pts.length - 1; i++) {
+    const mx = (pts[i][0] + pts[i + 1][0]) / 2 * W, my = (pts[i][1] + pts[i + 1][1]) / 2 * H;
+    ctx.quadraticCurveTo(pts[i][0] * W, pts[i][1] * H, mx, my);
+  }
+  const l = pts[pts.length - 1]; ctx.lineTo(l[0] * W, l[1] * H); ctx.stroke();
+}
+/* ---------- pixel retouch: seamless healing, spot healing, redness, skin ---------- */
+const PIXEL_RT = new Set(['heal', 'spot', 'redness', 'skin']);
+function rtMask(s, W, H, x0, y0, bw, bh, lw, extra) {
+  const c = mk(bw, bh), x = c.getContext('2d', {willReadFrequently: true});
+  x.translate(-x0, -y0); x.strokeStyle = x.fillStyle = '#fff'; x.lineCap = 'round'; x.lineJoin = 'round'; x.lineWidth = lw + extra;
+  strokePath(x, s.pts, W, H, lw + extra);
+  const a = x.getImageData(0, 0, bw, bh).data, m = new Float32Array(bw * bh);
+  for (let i = 0; i < m.length; i++) m[i] = a[i * 4 + 3] / 255;
+  return m;
+}
+// Harmonic (membrane) interpolation of the seam difference into the hole: the core of a healing brush.
+function membrane(val, known, bw, bh, r) {
+  const n = bw * bh, num = new Float32Array(n * 3), den = new Float32Array(n * 3);
+  for (let i = 0; i < n; i++) if (known[i]) { num[i * 3] = val[i * 3]; num[i * 3 + 1] = val[i * 3 + 1]; num[i * 3 + 2] = val[i * 3 + 2]; den[i * 3] = den[i * 3 + 1] = den[i * 3 + 2] = 1; }
+  const R = Math.max(1, Math.round(r));
+  const bn = boxBlur(boxBlur(num, bw, bh, R), bw, bh, R), bd = boxBlur(boxBlur(den, bw, bh, R), bw, bh, R);
+  const out = new Float32Array(n * 3);
+  for (let i = 0; i < n * 3; i++) out[i] = known[(i / 3) | 0] ? val[i] : (bd[i] > 1e-4 ? bn[i] / bd[i] : 0);
+  // Jacobi relaxation so the fill is smooth (Laplace equation) and meets the seam exactly
+  const it = Math.min(120, 20 + Math.round(r * 1.5));
+  for (let k = 0; k < it; k++) {
+    for (let y = 1; y < bh - 1; y++) for (let x = 1; x < bw - 1; x++) {
+      const i = y * bw + x; if (known[i]) continue;
+      const a = i * 3, l = a - 3, rr = a + 3, u = a - bw * 3, dn = a + bw * 3;
+      out[a] = (out[l] + out[rr] + out[u] + out[dn]) * .25;
+      out[a + 1] = (out[l + 1] + out[rr + 1] + out[u + 1] + out[dn + 1]) * .25;
+      out[a + 2] = (out[l + 2] + out[rr + 2] + out[u + 2] + out[dn + 2]) * .25;
+    }
+  }
+  return out;
+}
+function pixelRetouch(cv, s) {
+  const W = cv.width, H = cv.height, lw = Math.max(3, s.size * W), str = s.str / 100;
+  const pad = Math.ceil(lw * .8) + 6;
+  let x0 = 1e9, y0 = 1e9, x1 = -1e9, y1 = -1e9;
+  s.pts.forEach(([u, v]) => { x0 = Math.min(x0, u * W); y0 = Math.min(y0, v * H); x1 = Math.max(x1, u * W); y1 = Math.max(y1, v * H); });
+  x0 = Math.max(0, Math.floor(x0 - lw / 2 - pad)); y0 = Math.max(0, Math.floor(y0 - lw / 2 - pad));
+  x1 = Math.min(W, Math.ceil(x1 + lw / 2 + pad)); y1 = Math.min(H, Math.ceil(y1 + lw / 2 + pad));
+  const bw = x1 - x0, bh = y1 - y0, n = bw * bh;
+  if (bw < 3 || bh < 3) return;
+  const ctx = cv.getContext('2d', {willReadFrequently: true});
+  const D = ctx.getImageData(x0, y0, bw, bh), d = D.data;
+  const soft = rtMask(s, W, H, x0, y0, bw, bh, lw, 0);
+  if (s.tool === 'heal' || s.tool === 'spot') {
+    const hole = rtMask(s, W, H, x0, y0, bw, bh, lw, 2), ring = rtMask(s, W, H, x0, y0, bw, bh, lw, 10);
+    const known = new Uint8Array(n); for (let i = 0; i < n; i++) known[i] = hole[i] < .02 ? 1 : 0;
+    let ox, oy;
+    if (s.off) { ox = Math.round(s.off[0] * W); oy = Math.round(s.off[1] * H); }
+    else {
+      // spot healing: look around the blemish for the patch whose seam fits best
+      let best = Infinity; const dist = lw * 1.25 + 4;
+      for (let k = 0; k < 16; k++) {
+        const a = k / 16 * Math.PI * 2, f = k % 2 ? 1.6 : 1, cx = Math.round(Math.cos(a) * dist * f), cy = Math.round(Math.sin(a) * dist * f);
+        if (x0 + cx < 0 || y0 + cy < 0 || x1 + cx > W || y1 + cy > H) continue;
+        const Sd = ctx.getImageData(x0 + cx, y0 + cy, bw, bh).data;
+        let m = [0, 0, 0], q = 0, cnt = 0;
+        for (let i = 0; i < n; i++) if (ring[i] > .5 && known[i]) {
+          for (let c = 0; c < 3; c++) { const df = d[i * 4 + c] - Sd[i * 4 + c]; m[c] += df; q += df * df; }
+          cnt++;
+        }
+        if (!cnt) continue;
+        const v = q / cnt - (m[0] * m[0] + m[1] * m[1] + m[2] * m[2]) / (cnt * cnt);
+        if (v < best) { best = v; ox = cx; oy = cy; }
+      }
+      if (ox === undefined) { ox = -Math.round(dist); oy = 0; }
+    }
+    const sx = clamp(x0 + ox, 0, W - bw), sy = clamp(y0 + oy, 0, H - bh);
+    const Sd = ctx.getImageData(sx, sy, bw, bh).data;
+    const val = new Float32Array(n * 3);
+    for (let i = 0; i < n; i++) for (let c = 0; c < 3; c++) val[i * 3 + c] = d[i * 4 + c] - Sd[i * 4 + c];
+    const fill = membrane(val, known, bw, bh, lw * .35);
+    for (let i = 0; i < n; i++) {
+      const a = Math.min(1, hole[i] * 1.2) * str; if (a <= 0) continue;
+      for (let c = 0; c < 3; c++) { const v = Sd[i * 4 + c] + fill[i * 3 + c]; d[i * 4 + c] += (v - d[i * 4 + c]) * a; }
+    }
+  } else if (s.tool === 'redness') {
+    // reference skin = calm (not red) pixels around and under the brush
+    // redness of a pixel = how much red exceeds green; the person's normal skin has some too,
+    // so measure it on the calmer half of the surrounding skin and remove only the excess
+    const ring = rtMask(s, W, H, x0, y0, bw, bh, lw, lw * .9);
+    const redOf = k => d[k] - d[k + 1];
+    const exs = [];
+    for (let i = 0; i < n; i++) if (ring[i] > .5 && soft[i] < .3) exs.push(redOf(i * 4));
+    if (!exs.length) for (let i = 0; i < n; i++) if (ring[i] > .5) exs.push(redOf(i * 4));
+    exs.sort((p, q) => p - q);
+    const base = exs.length ? exs[Math.floor(exs.length * .5)] : 40;
+    let rr = 0, rg = 0, rb = 0, cnt = 0;
+    for (let i = 0; i < n; i++) {
+      if (ring[i] < .5 || soft[i] >= .3) continue;
+      const k = i * 4; if (redOf(k) > base) continue;
+      rr += d[k]; rg += d[k + 1]; rb += d[k + 2]; cnt++;
+    }
+    if (!cnt) { rr = 200; rg = 150; rb = 125; cnt = 1; }
+    rr /= cnt; rg /= cnt; rb /= cnt;
+    const lRef = .299 * rr + .587 * rg + .114 * rb;
+    for (let i = 0; i < n; i++) {
+      const a = soft[i] * str; if (a <= 0) continue;
+      const k = i * 4, r = d[k], g = d[k + 1], b = d[k + 2];
+      const ex = redOf(k) - base - 4;
+      if (ex <= 0) continue;
+      const w = Math.min(1, ex / 30) * a;
+      const l0 = .299 * r + .587 * g + .114 * b, f = Math.pow(Math.max(.05, l0 / lRef), .15);
+      d[k] += (rr * f - r) * w; d[k + 1] += (rg * f - g) * w; d[k + 2] += (rb * f - b) * w;
+    }
+  } else if (s.tool === 'skin') {
+    // frequency separation: smooth the blotchy middle frequencies, keep pores, leave strong edges alone
+    const f = new Float32Array(n * 3);
+    for (let i = 0; i < n; i++) { f[i * 3] = d[i * 4]; f[i * 3 + 1] = d[i * 4 + 1]; f[i * 3 + 2] = d[i * 4 + 2]; }
+    const R = Math.max(2, Math.round(lw * .08));
+    const low = boxBlur(boxBlur(f, bw, bh, R), bw, bh, R), fine = boxBlur(f, bw, bh, 1);
+    for (let i = 0; i < n; i++) {
+      const a = soft[i] * str; if (a <= 0) continue;
+      const j = i * 3;
+      const dl = Math.abs((f[j] + f[j + 1] + f[j + 2]) - (low[j] + low[j + 1] + low[j + 2])) / 3;
+      const w = a * Math.exp(-(dl / 26) * (dl / 26));
+      for (let c = 0; c < 3; c++) { const v = low[j + c] + (f[j + c] - fine[j + c]) * .6; d[i * 4 + c] += (v - d[i * 4 + c]) * w; }
+    }
+  }
+  ctx.putImageData(D, x0, y0);
+}
+function applyRetouch(cv, s) {
+  if (PIXEL_RT.has(s.tool)) return pixelRetouch(cv, s);
+  const W = cv.width, H = cv.height;
+  if (rtLayer.width !== W || rtLayer.height !== H) { rtLayer.width = W; rtLayer.height = H; }
+  const L = rtLayer.getContext('2d');
+  L.setTransform(1, 0, 0, 1, 0, 0); L.globalCompositeOperation = 'source-over'; L.globalAlpha = 1; L.filter = 'none';
+  L.clearRect(0, 0, W, H);
+  const lw = s.size * W, feather = (1 - s.hard / 100) * lw * .3;
+  L.filter = feather > .4 ? `blur(${feather.toFixed(1)}px)` : 'none';
+  L.strokeStyle = L.fillStyle = '#fff'; L.lineCap = 'round'; L.lineJoin = 'round'; L.lineWidth = lw * (feather > .4 ? .8 : 1);
+  strokePath(L, s.pts, W, H, L.lineWidth);
+  L.globalCompositeOperation = 'source-in';
+  L.filter = {clone: 'none', heal: `blur(${Math.max(.6, lw * .03).toFixed(1)}px)`, blurb: `blur(${Math.max(1.5, lw * .12).toFixed(1)}px)`,
+    dodge: 'brightness(1.3)', burn: 'brightness(0.72) saturate(1.12)', sponge: 'saturate(1.8)'}[s.tool] || 'none';
+  L.drawImage(cv, s.off ? -s.off[0] * W : 0, s.off ? -s.off[1] * H : 0);
+  L.filter = 'none';
+  const x = cv.getContext('2d');
+  x.save(); x.setTransform(1, 0, 0, 1, 0, 0); x.globalAlpha = s.str / 100 * (s.tool === 'heal' ? .92 : 1); x.drawImage(rtLayer, 0, 0); x.restore();
+}
+function getOut() {
+  const [OW, OH] = oriented(img.prev.width, img.prev.height), c = S.geom.crop;
+  const W = Math.max(1, Math.round(c.w * OW)), H = Math.max(1, Math.round(c.h * OH));
+  const rts = S.strokes.filter(s => RT.has(s.tool));
+  const live = curStroke && RT.has(curStroke.tool) ? curStroke : null;
+  const key = procVer + '|' + JSON.stringify(S.geom) + '|' + JSON.stringify(rts) + '|' + (live ? JSON.stringify(live) : '') + '|' + HOOKS.outKey.map(f => f()).join('|');
+  if (key === outKey) return outC;
+  outKey = key;
+  // committed retouch is cached, so a live brush stroke only redoes itself
+  const baseKey = procVer + '|' + JSON.stringify(S.geom) + '|' + JSON.stringify(rts);
+  if (baseKey !== rtBaseKey || rtBase.width !== W || rtBase.height !== H) {
+    rtBaseKey = baseKey; rtBase.width = W; rtBase.height = H;
+    const bx = rtBase.getContext('2d', {willReadFrequently: true});
+    bx.clearRect(0, 0, W, H);
+    drawGeomOutput(bx, procC, W, H);
+    rts.forEach(s => applyRetouch(rtBase, s));
+  }
+  if (outC.width !== W || outC.height !== H) { outC.width = W; outC.height = H; }
+  outX.setTransform(1, 0, 0, 1, 0, 0); outX.globalAlpha = 1; outX.filter = 'none'; outX.globalCompositeOperation = 'source-over';
+  outX.clearRect(0, 0, W, H);
+  outX.drawImage(rtBase, 0, 0);
+  if (live) applyRetouch(outC, live);
+  HOOKS.out.forEach(f => f(outC, 'preview'));
+  return outC;
+}
+
+/* ---------- shapes, type, eyedropper, brush cursor, info ---------- */
+function drawShape(ctx, s, W, H) {
+  ctx.save();
+  ctx.strokeStyle = ctx.fillStyle = s.color; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+  if (s.tool === 'text') {
+    const fs = s.size * W;
+    ctx.font = `600 ${fs}px Inter, -apple-system, "Segoe UI", sans-serif`; ctx.textBaseline = 'top';
+    ctx.shadowColor = 'rgba(0,0,0,.25)'; ctx.shadowBlur = fs * .08;
+    s.text.split('\n').forEach((ln, i) => ctx.fillText(ln, s.pts[0][0] * W, s.pts[0][1] * H + i * fs * 1.2));
+    ctx.restore(); return;
+  }
+  const [a, b] = s.pts, x0 = a[0] * W, y0 = a[1] * H, x1 = b[0] * W, y1 = b[1] * H, lw = s.size * W;
+  ctx.lineWidth = lw; ctx.beginPath();
+  if (s.tool === 'rect') ctx.rect(Math.min(x0, x1), Math.min(y0, y1), Math.abs(x1 - x0), Math.abs(y1 - y0));
+  else if (s.tool === 'ellipse') ctx.ellipse((x0 + x1) / 2, (y0 + y1) / 2, Math.abs(x1 - x0) / 2, Math.abs(y1 - y0) / 2, 0, 0, Math.PI * 2);
+  else { ctx.moveTo(x0, y0); ctx.lineTo(x1, y1); }
+  if (s.fill && (s.tool === 'rect' || s.tool === 'ellipse')) ctx.fill(); else ctx.stroke();
+  if (s.tool === 'arrow') {
+    const ang = Math.atan2(y1 - y0, x1 - x0), hl = Math.max(10, lw * 4);
+    ctx.beginPath();
+    ctx.moveTo(x1 - hl * Math.cos(ang - .45), y1 - hl * Math.sin(ang - .45)); ctx.lineTo(x1, y1);
+    ctx.lineTo(x1 - hl * Math.cos(ang + .45), y1 - hl * Math.sin(ang + .45));
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+function pickColor(p) {
+  const dpr = devicePixelRatio || 1, px = vctx.getImageData(Math.round(p.x * dpr), Math.round(p.y * dpr), 1, 1).data;
+  markColor = '#' + [px[0], px[1], px[2]].map(v => v.toString(16).padStart(2, '0')).join('');
+  $('#customColor').value = markColor;
+  toast('Цвет взят пипеткой: ' + markColor.toUpperCase());
+  syncMarkup();
+}
+function showPixel(p) {
+  if (!img || mode === 'crop') return;
+  const r = outRect();
+  if (p.x < r.x || p.y < r.y || p.x >= r.x + r.w || p.y >= r.y + r.h) { updateDocInfo(); return; }
+  const dpr = devicePixelRatio || 1, px = vctx.getImageData(Math.round(p.x * dpr), Math.round(p.y * dpr), 1, 1).data;
+  const [OW, OH] = oriented(img.full.width, img.full.height), c = S.geom.crop;
+  const X = Math.floor((p.x - r.x) / r.w * c.w * OW), Y = Math.floor((p.y - r.y) / r.h * c.h * OH);
+  $('#docinfo').textContent = `X ${X}  Y ${Y}    R ${px[0]}  G ${px[1]}  B ${px[2]}    #${[px[0], px[1], px[2]].map(v => v.toString(16).padStart(2, '0')).join('').toUpperCase()}`;
+}
+function drawBrushCursor(ctx, r) {
+  if (!hoverP || comparing || panDrag) return;
+  let rad = 0;
+  if (mode === 'retouch') rad = rtSize / 2;
+  else if (mode === 'markup' && ['pen', 'marker', 'pencil', 'eraser'].includes(markTool)) rad = (markTool === 'marker' ? markSize * 2.6 : markTool === 'pencil' ? markSize * .5 : markTool === 'eraser' ? Math.max(10, markSize) : markSize) / 2;
+  if (rad) {
+    ctx.save(); ctx.beginPath(); ctx.arc(hoverP.x, hoverP.y, Math.max(2, rad), 0, 7);
+    ctx.strokeStyle = 'rgba(0,0,0,.55)'; ctx.lineWidth = 3; ctx.stroke();
+    ctx.strokeStyle = '#fff'; ctx.lineWidth = 1.2; ctx.stroke(); ctx.restore();
+  }
+  if (mode === 'retouch' && (rtTool === 'clone' || rtTool === 'heal') && cloneSrc) {
+    let sx, sy;
+    if (cloneOff) { sx = hoverP.x + cloneOff[0] * r.w; sy = hoverP.y + cloneOff[1] * r.h; }
+    else { sx = r.x + cloneSrc[0] * r.w; sy = r.y + cloneSrc[1] * r.h; }
+    ctx.save(); ctx.strokeStyle = '#fff'; ctx.lineWidth = 1.5; ctx.shadowColor = '#000'; ctx.shadowBlur = 3;
+    ctx.beginPath(); ctx.moveTo(sx - 9, sy); ctx.lineTo(sx + 9, sy); ctx.moveTo(sx, sy - 9); ctx.lineTo(sx, sy + 9); ctx.stroke(); ctx.restore();
+  }
+}
+function toggleGrid() { showGrid = !showGrid; $('#zGrid').setAttribute('aria-pressed', showGrid); schedule(); }
+$('#zGrid').onclick = toggleGrid;
+
+/* ---------- chip helper (same look as the iPhone adjustment dials) ---------- */
+function chipHTML(id, name, icon, cls = '') {
+  return `<button class="chip ${cls}" data-id="${id}" title="${name}"><span class="dial"><svg class="ring" viewBox="0 0 52 52"><circle class="bg" cx="26" cy="26" r="24"/><circle class="val" cx="26" cy="26" r="24" stroke-dasharray="0 ${C}"/></svg><span class="ico"><svg ${SVGA}>${icon}</svg></span><span class="num" hidden></span></span><span class="lbl">${name}</span></button>`;
+}
+function setChip(b, frac, sel, on) {
+  b.classList.toggle('sel', sel); b.classList.toggle('has', on);
+  b.querySelector('.val').setAttribute('stroke-dasharray', `${frac * C} ${C}`);
+  b.setAttribute('aria-pressed', sel);
+}
+
+/* ---------- UI: corrections (Image > Adjustments) ---------- */
+const CICON = {
+  levels: '<path d="M4 17h16"/><path d="M6.5 17v-3M10 17V9M13.5 17V5.5M17 17v-5"/><path d="m4 21 2-2 2 2zM16 21l2-2 2 2z" fill="currentColor"/>',
+  balance: '<path d="M12 4v15M6 20h12M5 7.5h14"/><path d="M5 7.5 2.5 13h5zM19 7.5 16.5 13h5z"/>',
+  hsl: '<circle cx="12" cy="12" r="8.5"/><path d="M12 3.5V12l7.4 4.2M12 12l-7.4 4.2"/>',
+  photo: '<circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="5" fill="currentColor" opacity=".45"/>',
+  gmap: '<rect x="3" y="7" width="18" height="10" rx="2"/><path d="M8 7v10" opacity=".5"/><path d="M13 7v10" opacity=".75"/>',
+  desat: '<path d="M12 3c3.2 4.3 6.2 7.4 6.2 11.2a6.2 6.2 0 0 1-12.4 0C5.8 10.4 8.8 7.3 12 3z"/><path d="M4 20 20 4"/>',
+  invert: '<rect x="4" y="4" width="16" height="16" rx="2.5"/><path d="M4 20 20 4v16z" fill="currentColor"/>',
+  posterize: '<path d="M4 19h4v-4h4v-4h4V7h4"/>',
+  threshold: '<rect x="4" y="5" width="16" height="14" rx="2"/><path d="M12 5h6a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2h-6z" fill="currentColor"/>',
+};
+const CORR = [
+  {id: 'levels', name: 'Уровни'}, {id: 'balance', name: 'Цветовой баланс'}, {id: 'hsl', name: 'Цветовой тон'},
+  {id: 'photo', name: 'Фотофильтр'}, {id: 'gmap', name: 'Карта градиента'}, {id: 'desat', name: 'Обесцветить', toggle: true},
+  {id: 'invert', name: 'Инверсия', toggle: true}, {id: 'posterize', name: 'Постеризация'}, {id: 'threshold', name: 'Порог'},
+];
+const CORR_TITLE = {levels: 'Уровни (Ctrl+L)', balance: 'Цветовой баланс (Ctrl+B)', hsl: 'Цветовой тон / Насыщенность (Ctrl+U)', photo: 'Фотофильтр', gmap: 'Карта градиента',
+  desat: 'Обесцветить (Shift+Ctrl+U)', invert: 'Инверсия (Ctrl+I)', posterize: 'Постеризация', threshold: 'Порог'};
+let selCorr = 'levels', balTone = 'm', hslRange = 'all';
+const R8 = {ppu: 2, tick: 5, major: 25};
+function corrControls(id) {
+  const c = () => S.cor, R = (label, min, max, def, get, set, opts = {}, show) => ({kind: 'r', label, min, max, def, get, set, opts, show}),
+    P = (list, get, set, state) => ({kind: 'p', list, get, set, state});
+  switch (id) {
+    case 'levels': return [
+      R('Вход: черная точка', 0, 253, 0, () => c().levels[0], v => { c().levels[0] = Math.min(v, c().levels[2] - 2); }, R8),
+      R('Средние тона (гамма)', -100, 100, 0, () => c().levels[1], v => { c().levels[1] = v; }, {}, v => Math.pow(2, v / 50).toFixed(2)),
+      R('Вход: белая точка', 2, 255, 255, () => c().levels[2], v => { c().levels[2] = Math.max(v, c().levels[0] + 2); }, R8),
+      R('Выход: черный', 0, 255, 0, () => c().levels[3], v => { c().levels[3] = v; }, R8),
+      R('Выход: белый', 0, 255, 255, () => c().levels[4], v => { c().levels[4] = v; }, R8)];
+    case 'balance': return [
+      P(TONES, () => balTone, v => { balTone = v; }, false),
+      R('Голубой — Красный', -100, 100, 0, () => c().balance[balTone][0], v => { c().balance[balTone][0] = v; }),
+      R('Пурпурный — Зеленый', -100, 100, 0, () => c().balance[balTone][1], v => { c().balance[balTone][1] = v; }),
+      R('Желтый — Синий', -100, 100, 0, () => c().balance[balTone][2], v => { c().balance[balTone][2] = v; })];
+    case 'hsl': return [
+      P(HUE_RANGES, () => hslRange, v => { hslRange = v; }, false),
+      R('Цветовой тон', -180, 180, 0, () => c().hsl[hslRange][0], v => { c().hsl[hslRange][0] = v; }, {ppu: 2, tick: 5, major: 30}),
+      R('Насыщенность', -100, 100, 0, () => c().hsl[hslRange][1], v => { c().hsl[hslRange][1] = v; }),
+      R('Яркость', -100, 100, 0, () => c().hsl[hslRange][2], v => { c().hsl[hslRange][2] = v; })];
+    case 'photo': return [
+      P(PHOTO_F, () => c().photo, v => { c().photo = v; }, true),
+      R('Плотность', 0, 100, 25, () => c().density, v => { c().density = v; })];
+    case 'gmap': return [
+      P(GMAPS, () => c().gmap, v => { c().gmap = v; }, true),
+      R('Интенсивность', 0, 100, 100, () => c().gamt, v => { c().gamt = v; })];
+    case 'desat': return [{kind: 'n', text: 'Переводит фото в оттенки серого, как Shift+Ctrl+U в Photoshop. Нажмите на кружок ещё раз, чтобы выключить.'}];
+    case 'invert': return [{kind: 'n', text: 'Превращает фото в негатив, как Ctrl+I в Photoshop. Нажмите на кружок ещё раз, чтобы выключить.'}];
+    case 'posterize': return [R('Уровни на канал (0 — выкл.)', 0, 32, 0, () => c().posterize, v => { c().posterize = v === 1 ? 2 : v; }, {ppu: 9, tick: 1, major: 4})];
+    case 'threshold': return [R('Порог яркости (0 — выкл.)', 0, 255, 0, () => c().threshold, v => { c().threshold = v; }, R8)];
+  }
+  return [];
+}
+$('#corrChips').innerHTML = CORR.map(cd => chipHTML(cd.id, cd.name, CICON[cd.id], 'auto')).join('');
+const corrUI = {};
+CORR.forEach(cd => {
+  const body = document.createElement('div'); body.className = 'cbody'; body.hidden = true;
+  const ctrls = corrControls(cd.id);
+  ctrls.forEach(ct => {
+    if (ct.kind === 'n') { const p = document.createElement('p'); p.className = 'note'; p.textContent = ct.text; body.appendChild(p); return; }
+    if (ct.kind === 'p') {
+      const wrap = document.createElement('div'); wrap.className = 'pills';
+      wrap.innerHTML = ct.list.map(o => `<button class="pill" data-v="${o.id}">${o.name}</button>`).join('');
+      wrap.addEventListener('click', e => {
+        const b = e.target.closest('.pill'); if (!b || !img) return;
+        ct.set(b.dataset.v);
+        if (ct.state) { push(`${cd.name}: ${ct.list.find(o => o.id === b.dataset.v).name}`); invalidate(true); }
+        syncCorr();
+      });
+      ct.el = wrap; body.appendChild(wrap); return;
+    }
+    const head = document.createElement('div'); head.className = 'rhead';
+    head.innerHTML = `<b></b><output></output>`; head.firstChild.textContent = ct.label;
+    const cv = document.createElement('canvas'); cv.className = 'ruler'; cv.setAttribute('role', 'slider'); cv.setAttribute('aria-label', ct.label);
+    body.append(head, cv);
+    ct.out = head.lastChild;
+    ct.ruler = new Ruler(cv, Object.assign({min: ct.min, max: ct.max, def: ct.def, value: ct.def}, ct.opts));
+    ct.ruler.onInput = v => { ct.set(v); ct.out.textContent = ct.show ? ct.show(ct.get()) : ct.get(); invalidate(false); updateCorrChips(); };
+    ct.ruler.onCommit = () => { push(`${cd.name}: ${ct.label} ${ct.get()}`); scheduleThumbs(); };
+  });
+  $('#corrBodies').appendChild(body);
+  corrUI[cd.id] = {body, ctrls};
+});
+function updateCorrChips() {
+  $('#corrChips').querySelectorAll('.chip').forEach(b => { const on = corrActive(S.cor, b.dataset.id); setChip(b, on ? 1 : 0, b.dataset.id === selCorr, on); });
+}
+function syncCorr() {
+  if (!S.cor) S.cor = defaultCor();
+  $('#corrName').textContent = CORR_TITLE[selCorr];
+  for (const id in corrUI) {
+    const u = corrUI[id]; u.body.hidden = id !== selCorr;
+    if (id !== selCorr) continue;
+    u.ctrls.forEach(ct => {
+      if (ct.kind === 'r') { ct.ruler.setValue(ct.get()); ct.out.textContent = ct.show ? ct.show(ct.get()) : ct.get(); }
+      if (ct.kind === 'p') ct.el.querySelectorAll('.pill').forEach(b => b.setAttribute('aria-pressed', b.dataset.v === ct.get()));
+    });
+  }
+  updateCorrChips();
+}
+function openCorr(id) {
+  setMode('corr');
+  const cd = CORR.find(c => c.id === id); if (!cd) return;
+  selCorr = id;
+  if (cd.toggle && img) { S.cor[id] = !S.cor[id]; push(`${cd.name}: ${S.cor[id] ? 'вкл.' : 'выкл.'}`); invalidate(true); }
+  syncCorr();
+}
+$('#corrChips').addEventListener('click', e => { const b = e.target.closest('.chip'); if (b) openCorr(b.dataset.id); });
+$('#corrReset').onclick = () => {
+  if (!img) return;
+  const d = defaultCor(), id = selCorr;
+  if (id === 'photo') { S.cor.photo = d.photo; S.cor.density = d.density; }
+  else if (id === 'gmap') { S.cor.gmap = d.gmap; S.cor.gamt = d.gamt; }
+  else S.cor[id] = d[id];
+  push(`${CORR.find(c => c.id === id).name}: сброс`); syncCorr(); invalidate(true);
+};
+
+/* ---------- UI: Filter menu effects ---------- */
+const FX = [
+  {id: 'blur', name: 'Размытие по Гауссу', ic: '<circle cx="12" cy="12" r="8" opacity=".3" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="4"/>'},
+  {id: 'motion', name: 'Размытие в движении', ic: '<circle cx="15" cy="12" r="4.5"/><path d="M2.5 9h6M2 12h5.5M2.5 15h6"/>'},
+  {id: 'noise', name: 'Добавить шум', ic: '<g fill="currentColor" stroke="none"><circle cx="5" cy="6" r="1.2"/><circle cx="11" cy="4.5" r="1"/><circle cx="17.5" cy="7" r="1.3"/><circle cx="8" cy="11" r="1"/><circle cx="14" cy="12" r="1.2"/><circle cx="19.5" cy="14" r="1"/><circle cx="5" cy="16.5" r="1.3"/><circle cx="11" cy="18.5" r="1"/><circle cx="17" cy="19.5" r="1.2"/></g>'},
+  {id: 'mosaic', name: 'Мозаика', ic: '<rect x="4" y="4" width="7" height="7" fill="currentColor"/><rect x="13" y="4" width="7" height="7"/><rect x="4" y="13" width="7" height="7"/><rect x="13" y="13" width="7" height="7" fill="currentColor"/>'},
+  {id: 'emboss', name: 'Тиснение', ic: '<path d="M3.5 17 9 8l4 6 3-4 4.5 7z"/><path d="M3.5 20h17"/>'},
+  {id: 'edges', name: 'Выделение краев', ic: '<path d="M3.5 18 9 9l4 5 3-3 4.5 7"/><path d="M4 5h3M10.5 5h3M17 5h3"/>'},
+];
+let selFx = 'blur';
+$('#fxChips').innerHTML = FX.map(f => chipHTML(f.id, f.name, f.ic)).join('');
+const fxRuler = new Ruler($('#fxRuler'), {min: 0, max: 100, def: 0});
+fxRuler.onInput = v => { S.fx[selFx] = v; $('#fxVal').textContent = v; updateFxChips(); invalidate(false); };
+fxRuler.onCommit = v => push(`${FX.find(f => f.id === selFx).name} ${v}`);
+$('#fxChips').addEventListener('click', e => { const b = e.target.closest('.chip'); if (b) { selFx = b.dataset.id; syncFx(); } });
+function updateFxChips() { $('#fxChips').querySelectorAll('.chip').forEach(b => setChip(b, (S.fx[b.dataset.id] || 0) / 100, b.dataset.id === selFx, (S.fx[b.dataset.id] || 0) > 0)); }
+function syncFx() {
+  if (!S.fx) S.fx = defaultState().fx;
+  $('#fxName').textContent = FX.find(f => f.id === selFx).name;
+  $('#fxVal').textContent = S.fx[selFx]; fxRuler.setValue(S.fx[selFx]); updateFxChips();
+}
+
+/* ---------- UI: retouch tools ---------- */
+const RTOOLS = [
+  {id: 'clone', name: 'Штамп', key: 'S', ic: '<path d="M9 3h6v5l3 3v3H6v-3l3-3z"/><path d="M5 17.5h14V21H5z"/>', note: 'Alt + клик задает место, откуда копировать. Затем рисуйте там, где нужно закрыть лишнее.'},
+  {id: 'spot', name: 'Точечная восстанавливающая', key: 'J', ic: '<rect x="2.5" y="8.5" width="19" height="7" rx="3.5" transform="rotate(-45 12 12)"/><path d="M10.5 12h3M12 10.5v3"/>', note: 'Закрашивайте прыщи, пылинки и пятна чуть крупнее их самих. Кисть сама находит чистую кожу рядом, переносит её текстуру и подгоняет цвет — без «подтертого» пятна.'},
+  {id: 'heal', name: 'Восстанавливающая кисть', key: '', ic: '<rect x="2.5" y="8.5" width="19" height="7" rx="3.5" transform="rotate(-45 12 12)"/><circle cx="17" cy="7" r="2"/>', note: 'Как в Photoshop: Alt + клик по чистому участку, затем рисуйте по дефекту. Текстура берется из источника, а цвет и свет — из места, которое правите.'},
+  {id: 'redness', name: 'Убрать покраснения', key: '', ic: '<circle cx="12" cy="12" r="7.5"/><path d="M8.5 12h7"/><circle cx="12" cy="12" r="2.5" fill="currentColor" opacity=".4"/>', note: 'Проведите по покраснениям, прыщикам и сосудикам: уходит только лишний красный, кожа остается живой.'},
+  {id: 'skin', name: 'Сглаживание кожи', key: '', ic: '<path d="M4 15c3-4 5 2 8-2s5 2 8-2"/><path d="M4 19h16" opacity=".5"/>', note: 'Выравнивает пятна и неровный тон, но сохраняет поры и не трогает глаза, брови и края.'},
+  {id: 'blurb', name: 'Размытие', key: 'R', ic: '<path d="M12 3c3.2 4.3 6.2 7.4 6.2 11.2a6.2 6.2 0 0 1-12.4 0C5.8 10.4 8.8 7.3 12 3z"/>', note: 'Смягчает участок под кистью: фон, морщинки, резкие края.'},
+  {id: 'dodge', name: 'Осветлитель', key: 'O', ic: '<circle cx="9" cy="9" r="5"/><path d="m12.5 12.5 7 7"/>', note: 'Высветляет участок: глаза, блики, лица в тени.'},
+  {id: 'burn', name: 'Затемнитель', key: '', ic: '<path d="M8 12.5V6.5a1.5 1.5 0 0 1 3 0v5M11 11V4.5a1.5 1.5 0 0 1 3 0V11M14 11V5.5a1.5 1.5 0 0 1 3 0V12M17 12V9a1.5 1.5 0 0 1 3 0v5a7 7 0 0 1-7 7 6 6 0 0 1-5.2-3L5 14a1.5 1.5 0 0 1 2.5-1.6L8 13"/>', note: 'Затемняет участок: небо, края кадра, пересветы.'},
+  {id: 'sponge', name: 'Губка', key: '', ic: '<rect x="4" y="7" width="16" height="11" rx="3"/><circle cx="9" cy="11" r="1" fill="currentColor"/><circle cx="14" cy="14.5" r="1.2" fill="currentColor"/><circle cx="16" cy="10" r=".8" fill="currentColor"/>', note: 'Делает цвета под кистью насыщеннее.'},
+];
+let rtTool = 'spot', rtSize = 40, rtHard = 40, rtStr = 100;
+$('#rtools').innerHTML = RTOOLS.map(t => `<button class="tool" data-id="${t.id}" title="${t.name}${t.key ? ' (' + t.key + ')' : ''}"><svg ${SVGA}>${t.ic}</svg>${t.name}</button>`).join('');
+$('#rtools').addEventListener('click', e => { const b = e.target.closest('.tool'); if (b) { rtTool = b.dataset.id; syncRetouch(); } });
+[['rtSize', v => rtSize = v], ['rtHard', v => rtHard = v], ['rtStr', v => rtStr = v]].forEach(([id, set]) => {
+  $('#' + id).addEventListener('input', e => { set(+e.target.value); $('#' + id + 'Val').textContent = e.target.value; schedule(); });
+});
+$('#btnClearRetouch').onclick = () => { const k = S.strokes.filter(s => !RT.has(s.tool)); if (k.length !== S.strokes.length) { S.strokes = k; push('Ретушь убрана'); schedule(); } };
+function syncRetouch() {
+  $('#rtools').querySelectorAll('.tool').forEach(b => b.setAttribute('aria-pressed', b.dataset.id === rtTool));
+  $('#rtNote').textContent = RTOOLS.find(t => t.id === rtTool).note;
+  $('#rtSize').value = rtSize; $('#rtSizeVal').textContent = rtSize;
+}
+function retouchDown(p, e) {
+  const r = outRect(), u = (p.x - r.x) / r.w, v = (p.y - r.y) / r.h;
+  const needsSrc = rtTool === 'clone' || rtTool === 'heal';
+  if (needsSrc && e.altKey) { cloneSrc = [u, v]; cloneOff = null; toast('Источник выбран'); schedule(); return; }
+  if (needsSrc && !cloneSrc) { toast('Сначала Alt + клик по месту, откуда брать текстуру'); return; }
+  const size = rtSize / r.w;
+  const off = needsSrc ? (cloneOff || [cloneSrc[0] - u, cloneSrc[1] - v]) : null;
+  curStroke = {tool: rtTool, pts: [[u, v]], size, hard: rtHard, str: rtStr, off};
+  schedule();
+}
+function pickTool(id) {
+  if (RTOOLS.some(t => t.id === id)) { setMode('retouch'); rtTool = id; syncRetouch(); return; }
+  setMode('markup'); markTool = id; syncMarkup();
+}
+function brushSize(dir) {
+  if (mode === 'retouch') { rtSize = clamp(Math.round(rtSize * (dir > 0 ? 1.2 : 1 / 1.2)), 4, 240); syncRetouch(); }
+  else { markSize = clamp(markSize + dir * 2, 2, 40); $('#markSize').value = markSize; $('#sizeVal').textContent = markSize; }
+  schedule();
+}
+
+/* ---------- module API (used by js/*.js) ---------- */
+const Lumen = window.Lumen = {
+  HOOKS, commands: {}, transparent: false, watermark: null, native,
+  get S() { return S; }, set S(v) { S = v; },
+  get img() { return img; }, get mode() { return mode; }, get procC() { return procC; },
+  get markColor() { return markColor; }, set markColor(v) { markColor = v; $('#customColor').value = v; syncMarkup(); },
+  get vz() { return vz; },
+  $, mk, clamp, SVGA, C, COLORS, Ruler, view, vctx,
+  setMode, push, restore, invalidate, schedule, syncUI, toast, outRect, fitRect, oriented, getOut, drawGeomOutput,
+  setImage, loadFile, decodeFile, params, colorPass, corrPass, fxPass, spatial, boxBlur, applyRetouch, strokePath,
+  chipHTML, setChip, updateDocInfo, openExport, makeSample, vignette, renderNow: () => frame(),
+  defaultLook() { const d = defaultState(); return {adj: d.adj, filter: d.filter, fi: d.fi, curves: d.curves, cor: d.cor, fx: d.fx}; },
+  look() { return JSON.parse(JSON.stringify({adj: S.adj, off: S.off, filter: S.filter, fi: S.fi, curves: S.curves, cor: S.cor, fx: S.fx})); },
+};
+
+/* ---------- boot ---------- */
+function boot() {
+  if (!native) {
+    // Lumen is a desktop and mobile program: outside the app window it does not run.
+    document.body.innerHTML = '<div class="gate"><i></i><h1>Lumen работает только как программа</h1><p>Установите Lumen для Windows, macOS или Android и откройте его как приложение.</p></div>';
+    return;
+  }
+  setMode('adjust');
+  setImage(makeSample(), 'Пример — закат');
+  [['brilliance', 18], ['vibrance', 22], ['vignette', 20]].forEach(([id, v]) => { S.adj[id] = v; push(`${ADJ_BY[id].name} ${fmt(v)}`); });
+  selAdj = 'brilliance';
+  syncUI(); invalidate(true);
+  document.dispatchEvent(new Event('lumen:ready'));
+}
+// modules (js/*.js) load after this script and register hooks first
+if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot); else setTimeout(boot);
+})();
+</script>
+<script src="js/config.js"></script>
+<script src="js/i18n-dict.js"></script>
+<script src="js/i18n.js"></script>
+<script src="js/plans.js"></script>
+<script src="js/layers.js"></script>
+<script src="js/brand.js"></script>
+<script src="js/masks.js"></script>
+<script src="js/select-ai.js" type="module"></script>
+<script src="js/formats.js" type="module"></script>
+<script src="js/enhance.js" type="module"></script>
+<script src="js/batch.js"></script>
+<script src="js/support.js"></script>

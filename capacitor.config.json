@@ -1,0 +1,8 @@
+{
+  "appId": "app.lumen.photo",
+  "appName": "Lumen",
+  "webDir": "app",
+  "android": { "allowMixedContent": false },
+  "server": { "androidScheme": "https" },
+  "plugins": {}
+}

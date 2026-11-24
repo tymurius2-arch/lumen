@@ -1,0 +1,125 @@
+{
+  "name": "lumen-photo",
+  "productName": "Lumen",
+  "version": "1.3.0",
+  "description": "Lumen: a free photo editor with iPhone-style adjustments, Photoshop tools and on-device AI",
+  "author": "Lumen",
+  "license": "MIT",
+  "main": "electron/main.js",
+  "scripts": {
+    "start": "electron . --lumen-dev",
+    "dist:win": "electron-builder --win --publish never",
+    "dist:mac": "electron-builder --mac --publish never",
+    "vendor": "node scripts/vendor.js",
+    "prestart": "node scripts/vendor.js",
+    "predist:win": "node scripts/vendor.js",
+    "predist:mac": "node scripts/vendor.js"
+  },
+  "build": {
+    "appId": "app.lumen.photo",
+    "productName": "Lumen",
+    "files": [
+      "app/**",
+      "!app/__dev.html",
+      "!app/__test/**",
+      "electron/**",
+      "package.json"
+    ],
+    "directories": {
+      "output": "dist",
+      "buildResources": "build"
+    },
+    "fileAssociations": [
+      {
+        "ext": [
+          "jpg",
+          "jpeg",
+          "png",
+          "webp",
+          "heic",
+          "heif",
+          "dng",
+          "cr2",
+          "cr3",
+          "nef",
+          "arw",
+          "raf",
+          "orf",
+          "rw2"
+        ],
+        "name": "Image",
+        "role": "Editor"
+      }
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "build/icon.ico",
+      "artifactName": "Lumen-Setup.exe"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "shortcutName": "Lumen"
+    },
+    "mac": {
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "universal"
+          ]
+        }
+      ],
+      "category": "public.app-category.photography",
+      "icon": "build/icon.png",
+      "artifactName": "Lumen-macOS.dmg",
+      "identity": "-",
+      "hardenedRuntime": false,
+      "gatekeeperAssess": false
+    },
+    "dmg": {
+      "title": "Lumen"
+    },
+    "protocols": [
+      {
+        "name": "Lumen",
+        "schemes": [
+          "lumen"
+        ]
+      }
+    ]
+  },
+  "devDependencies": {
+    "@capacitor/cli": "^8.6.0",
+    "electron": "^33.2.0",
+    "electron-builder": "^25.1.8"
+  },
+  "allowScripts": {
+    "electron@33.4.11": true
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/tymurius2-arch/lumen.git"
+  },
+  "homepage": "https://tymurius2-arch.github.io/lumen/",
+  "dependencies": {
+    "@capacitor/android": "^8.6.0",
+    "@capacitor/app": "^8.1.2",
+    "@capacitor/browser": "^8.0.5",
+    "@capacitor/core": "^8.6.0",
+    "@capacitor/filesystem": "^8.1.5",
+    "@capacitor/ios": "^8.6.0",
+    "@capacitor/share": "^8.0.3",
+    "@mediapipe/tasks-vision": "^1.2.2",
+    "libheif-js": "^1.23.5",
+    "libraw-wasm": "^1.6.0"
+  }
+}

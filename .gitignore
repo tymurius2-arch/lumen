@@ -1,0 +1,6 @@
+node_modules/
+dist/
+app/__dev.html
+app/vendor/
+.playwright-mcp/
+app/__test/
